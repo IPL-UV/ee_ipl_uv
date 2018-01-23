@@ -96,7 +96,7 @@ class Kernel:
 
         # Remove weight propery if present
         if weight_property is not None:
-            properties = filter(lambda prop: prop != weight_property, properties)
+            properties = list(filter(lambda prop: prop != weight_property, properties))
             self.weight_array = converters.eeFeatureCollectionToeeArray(feature_collection,
                                                                         [weight_property])
         else:

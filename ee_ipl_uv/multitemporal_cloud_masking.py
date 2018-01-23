@@ -15,7 +15,6 @@ from ee_ipl_uv import converters
 from ee_ipl_uv import time_series_operations
 from ee_ipl_uv import normalization
 from ee_ipl_uv import clustering
-from ee_ipl_uv import predefined_cloud_algorithms
 import numpy as np
 import logging
 
@@ -141,6 +140,11 @@ class ModelCloudMasking:
             self.datos, self.outputs_mean, self.outputs_sd = normalization.ComputeNormalizationFeatureCollection(
                 self.datos, self.bands_modeling_estimation_output, only_center_data=True, weight="weight")
 
+            #if "B10" in self.bands_modeling_estimation_output:
+            #    self.datos.select("B10").divide(100)
+            #if "B11" in self.bands_modeling_estimation_output:
+            #    output_dataset["B11"] /= 100
+
         self.inputs = self.datos.select(bands_modeling_estimation_input_weight)
         self.outputs = self.datos.select(self.bands_modeling_estimation_output)
 
@@ -166,7 +170,7 @@ class ModelCloudMasking:
 
         ds_download_pd = converters.eeFeatureCollectionToPandas(self.datos, bme,
                                                                 with_task=with_task)
-        logger.info("Size of downloaded ds: ", ds_download_pd.shape)
+        logger.info("Size of downloaded ds: {}".format(ds_download_pd.shape))
 
         pesos = np.asanyarray(ds_download_pd.weight)
         from sklearn.kernel_ridge import KernelRidge
@@ -182,7 +186,7 @@ class ModelCloudMasking:
                               fit_params={"sample_weight": pesos})
             kr.fit(ds_download_pd[self.bands_modeling_estimation_input],
                    ds_download_pd[self.bands_modeling_estimation_output])
-            logger.info("CV params:", kr.best_params_)
+            logger.info("CV params: {}".format(kr.best_params_))
             self.alpha = ee.Array(kr.best_estimator_.dual_coef_.tolist())  # column vector
             self.kernel_rbf = kernel.Kernel(self.inputs, self.bands_modeling_estimation_input,
                                             kernel.RBFDistance(kr.best_params_["gamma"]),
@@ -298,7 +302,7 @@ class ModelCloudMasking:
         
         n_samples = ds_download_pd.shape[0]
         
-        logger.info("Size of downloaded ds: ", ds_download_pd.shape)
+        logger.info("Size of downloaded ds: {}".format(ds_download_pd.shape))
         pesos = np.asanyarray(ds_download_pd.weight)
         ini = datetime.now()
         if with_cross_validation:
@@ -312,7 +316,7 @@ class ModelCloudMasking:
 
             lin_reg = kr.best_estimator_
             self.lmbda = kr.best_params_["alpha"]
-            logger.info("CV params:", kr.best_params_)
+            logger.info("CV params: {}".format(kr.best_params_))
         else:
             self.lmbda = lmbda
             lin_reg = Ridge(fit_intercept=True,
@@ -539,7 +543,7 @@ def CloudClusterScore(img,region_of_interest,num_images=1,method_pred="persisten
                                            region_of_interest=region_of_interest,
                                            num_images=num_images)
 
-    clouds_original = predefined_cloud_algorithms.QACloudMask(img, strict=False)
+    clouds_original = img.select('BQA').bitwiseAnd(int('1010000000000000', 2)).gt(0)
 
     clouds = clouds_original.reduceNeighborhood(ee.Reducer.max(),
                                                 ee.Kernel.circle(radius=3))
@@ -573,7 +577,8 @@ def CloudClusterScore(img,region_of_interest,num_images=1,method_pred="persisten
                                    clouds, num_images, region_of_interest)
         if params["trainlocal"]:
             modelo.TrainRBFKernelLocal(sampling_factor=params["sampling_factor"],
-                                        lmbda=params["lmbda"], gamma=params["gamma"],
+                                       lmbda=params["lmbda"], gamma=params["gamma"],
+                                       with_task=params["with_task"],
                                        with_cross_validation=params["with_cross_validation"])
         else:
             modelo.TrainRBFKernelServer(sampling_factor=params["sampling_factor"],
