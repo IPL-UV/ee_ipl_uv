@@ -166,19 +166,8 @@ class Kernel:
         :return: ee.Image
         """
         arrayImage1D = image.select(self.properties).toArray()
-        # Convert to Column vector
-        # array_image_fc = self.distancia.arrayImageNumpyDistance(arrayImage2D, self.getNumpy())
-        array_image_fc = self.distancia.arrayImageeeArrayDistance(arrayImage1D,
-                                                                  self.geteeArray())
 
-        if type(alpha) is ee.Array:
-            alpha_server = alpha
-        elif type(alpha) is np.ndarray:
-            alpha_server = ee.Array(alpha.tolist())
-        else:
-            alpha_server = ee.Array(alpha)
-
-        return array_image_fc.matrixMultiply(alpha_server)
+        return kernelMethodImage(arrayImage1D, self.geteeArray(), alpha,self.distancia)
 
     def applyToArray(self, array_feature):
         def distancia_features(feature):
@@ -204,4 +193,37 @@ class Kernel:
         return list_col_2.map(apply_to_feature_col_2)
 
 
+def kernelMethodImage(arrayImage1D, inputs, alpha, distancia):
+    """
+    Function that applies a kernel method to every pixel of the image:
+     if x is the pixel:
+
+     f(x) = \sum_i distancia(x,inputs[i]) alpha[i]
+
+    :param arrayImage1D:
+    :param inputs:
+    :param alpha:
+    :param distancia:
+    :return: an arrayImage of 1D with the product
+
+    """
+
+    if type(inputs) is  not ee.Array:
+        if type(inputs) is np.ndarray:
+            inputs = ee.Array(inputs.tolist())
+        else:
+            inputs = ee.Array(inputs)
+
+    # Convert to Column vector
+    array_image_fc = distancia.arrayImageeeArrayDistance(arrayImage1D,
+                                                         inputs)
+
+    if type(alpha) is ee.Array:
+        alpha_server = alpha
+    elif type(alpha) is np.ndarray:
+        alpha_server = ee.Array(alpha.tolist())
+    else:
+        alpha_server = ee.Array(alpha)
+
+    return array_image_fc.matrixMultiply(alpha_server)
 

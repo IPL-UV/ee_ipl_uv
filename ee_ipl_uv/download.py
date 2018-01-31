@@ -100,7 +100,7 @@ def MaybeDownloadThumb(image, params={"format": "jpg"}, image_name=None,
             r_link.raw.decode_content = True
             shutil.copyfileobj(r_link.raw, f)
     else:
-        raise Exception("Can't download Status: %d"%r_link.status_code)
+        raise Exception("Can't download Status: %d\n %s"%(r_link.status_code,r_link.text))
 
     if os.stat(image_name).st_size < 100:
         file_content = open(image_name).readline()

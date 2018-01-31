@@ -15,12 +15,14 @@ from ee_ipl_uv import converters
 from ee_ipl_uv import time_series_operations
 from ee_ipl_uv import normalization
 from ee_ipl_uv import clustering
+from ee_ipl_uv import model_sklearn
 import numpy as np
 import logging
 
-CC_IMAGE_TOP = .6
 
+CC_IMAGE_TOP = .6
 logger = logging.getLogger(__name__)
+
 
 class ModelCloudMasking:
     def __init__(self, img, bands, cloud_mask, max_lags,
@@ -135,10 +137,15 @@ class ModelCloudMasking:
             self.datos = prediction_set.select(bmp,
                                                bme)
         if normalize:
-            self.datos, self.inputs_mean, self.inputs_sd = normalization.ComputeNormalizationFeatureCollection(
+            self.datos, self.inputs_mean, self.inputs_std = normalization.ComputeNormalizationFeatureCollection(
                 self.datos, self.bands_modeling_estimation_input, only_center_data=False, weight="weight")
-            self.datos, self.outputs_mean, self.outputs_sd = normalization.ComputeNormalizationFeatureCollection(
+            self.datos, self.outputs_mean, self.outputs_std = normalization.ComputeNormalizationFeatureCollection(
                 self.datos, self.bands_modeling_estimation_output, only_center_data=True, weight="weight")
+
+            self.inputs_mean = self.inputs_mean.toArray( self.bands_modeling_estimation_input)
+            self.inputs_std = self.inputs_std.toArray(self.bands_modeling_estimation_input)
+            self.outputs_mean = self.outputs_mean.toArray(self.bands_modeling_estimation_output)
+
 
             #if "B10" in self.bands_modeling_estimation_output:
             #    self.datos.select("B10").divide(100)
@@ -164,53 +171,48 @@ class ModelCloudMasking:
 
         :return:
         """
-        self._BuildDataSet(sampling_factor, normalize=True)
-        bme = list(self.bands_modeling_estimation)
-        bme.append("weight")
 
-        ds_download_pd = converters.eeFeatureCollectionToPandas(self.datos, bme,
-                                                                with_task=with_task)
-        logger.info("Size of downloaded ds: {}".format(ds_download_pd.shape))
+        best_params = None
+        if not with_cross_validation:
+            best_params = {"alpha": lmbda, "gamma":gamma}
 
-        pesos = np.asanyarray(ds_download_pd.weight)
-        from sklearn.kernel_ridge import KernelRidge
-        from sklearn.model_selection import GridSearchCV
-        
-        n_samples = ds_download_pd.shape[0]
-        ini = datetime.now()                
+        modelo = model_sklearn.KRRModel(best_params=best_params,verbose=1)
+        self._BuildDataSet(sampling_factor, normalize=False)
+
+        ds_total = converters.eeFeatureCollectionToPandas(self.datos,
+                                                          self.bands_modeling_estimation+["weight"],
+                                                          with_task=with_task)
+
+        logger.info("Size of downloaded ds: {}".format(ds_total.shape))
+
+        output_mean,output_std = model_sklearn.fit_model_local(ds_total,modelo,
+                                                              self.bands_modeling_estimation_input,
+                                                              self.bands_modeling_estimation_output)
 
         if with_cross_validation:
-            kr = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=5,
-                              param_grid={"alpha": np.logspace(-5, 2, 8),
-                                          "gamma": np.logspace(-3, 2, 6)},
-                              fit_params={"sample_weight": pesos})
-            kr.fit(ds_download_pd[self.bands_modeling_estimation_input],
-                   ds_download_pd[self.bands_modeling_estimation_output])
-            logger.info("CV params: {}".format(kr.best_params_))
-            self.alpha = ee.Array(kr.best_estimator_.dual_coef_.tolist())  # column vector
-            self.kernel_rbf = kernel.Kernel(self.inputs, self.bands_modeling_estimation_input,
-                                            kernel.RBFDistance(kr.best_params_["gamma"]),
-                                            weight_property="weight")
-            self.gamma = kr.best_params_["gamma"]
-            self.lmbda = kr.best_params_["alpha"]
-
+            logger.info("Best params: {}".format(modelo.named_steps["randomizedsearchcv"].best_params_))
+            ridge_kernel = modelo.named_steps["randomizedsearchcv"].best_estimator_
         else:
-            ridge_kernel = KernelRidge(alpha=lmbda,
-                                       gamma=gamma,
-                                       kernel="rbf")
-            self.gamma = gamma
-            self.lmbda = lmbda
+            ridge_kernel = modelo.named_steps["kernelridge"]
 
-            ridge_kernel.fit(ds_download_pd[self.bands_modeling_estimation_input],
-                             ds_download_pd[self.bands_modeling_estimation_output],
-                             sample_weight=pesos)
-            self.alpha = ee.Array(ridge_kernel.dual_coef_.tolist())  # column vector
-            self.kernel_rbf = kernel.Kernel(self.inputs, self.bands_modeling_estimation_input,
-                                            kernel.RBFDistance(gamma),
-                                            weight_property="weight")
-        duration = (datetime.now() - ini).total_seconds()
-        
-        return n_samples,duration
+        # Copy model parameters
+        self.gamma = ridge_kernel.gamma
+        self.lmbda = ridge_kernel.alpha
+        self.alpha = ee.Array(ridge_kernel.dual_coef_.tolist())  # column vector
+        self.inputs_krr =ee.Array(ridge_kernel.X_fit_.tolist())
+
+        self.distance_krr = kernel.RBFDistance(self.gamma)
+        self.kernel_rbf = kernel.Kernel(self.inputs, self.bands_modeling_estimation_input,
+                                        self.distance_krr,
+                                        weight_property="weight")
+
+        # Copy normalization stuff
+        self.inputs_mean = ee.Array(modelo.named_steps["standardscaler"].mean_.tolist())
+        self.inputs_std = ee.Array(modelo.named_steps["standardscaler"].scale_.tolist())
+        self.outputs_mean = ee.Array(output_mean.tolist())
+        self.outputs_std = ee.Array(output_std.tolist())
+
+        return
 
     def TrainRBFKernelServer(self, lmbda=.1, gamma=50., sampling_factor=1./1000.):
         """
@@ -227,13 +229,25 @@ class ModelCloudMasking:
         labels_output = self.bands_modeling_estimation_output
 
         # Train
+        self.distance_krr = kernel.RBFDistance(kernel.RBFDistance(gamma))
+        self.gamma = gamma
+        self.lmbda = lmbda
         self.kernel_rbf = kernel.Kernel(inputs, labels_input,
-                                        kernel.RBFDistance(gamma),
+                                        self.distance_krr,
                                         weight_property="weight")
 
         outputs_eeArray = converters.eeFeatureCollectionToeeArray(outputs, labels_output)
 
         self.alpha = self.kernel_rbf.getAlphaeeArray(outputs_eeArray, lmbda)
+
+    def _NormalizeImage(self, imagearray1D):
+        if self.inputs_mean is not None:
+            imagearray1D = imagearray1D.subtract(self.inputs_mean)
+
+        if self.inputs_std is not None:
+            imagearray1D = imagearray1D.divide(self.inputs_std)
+        return imagearray1D
+
 
     def PredictRBFKernel(self):
         """
@@ -243,37 +257,36 @@ class ModelCloudMasking:
         :return: forecasted image
         :rtype ee.Image
         """
-        labels_output = self.bands_modeling_estimation_output
-        labels_input = self.bands_modeling_estimation_input
 
         # Test
-        image_test_input = self.img.select(labels_input)
-        image_test_input = normalization.ApplyNormalizationImage(image_test_input, labels_input,
-                                                                 self.inputs_mean, self.inputs_sd)
+        image_test_input = self.img.select(self.bands_modeling_estimation_input).toArray()
+        image_test_input = self._NormalizeImage(image_test_input)
 
-        # image_test_output = self.img.select(labels_output)
-        image_forecast_complete = self.kernel_rbf.applyModelToImage(image_test_input, self.alpha)
+        image_forecast_complete = kernel.kernelMethodImage(image_test_input, self.inputs_krr, self.alpha,
+                                                           self.distance_krr)
 
         # Convert arrayImage to Image
-        image_forecast_complete = image_forecast_complete.arrayProject([1]).arrayFlatten([labels_output])
+        image_forecast_complete = image_forecast_complete.arrayProject([1])
 
         # Denormalize outputs
         return self._DenormalizeAndRename(image_forecast_complete, True)
 
     def _DenormalizeAndRename(self, image_forecast_complete, normalize):
         if normalize:
-            image_forecast_complete = normalization.ApplyDenormalizationImage(image_forecast_complete,
-                                                                              self.bands_modeling_estimation_output,
-                                                                              self.outputs_mean)
+            if self.outputs_std is not None:
+                image_forecast_complete = image_forecast_complete.multiply(self.outputs_std)
+
+            image_forecast_complete = image_forecast_complete.add(
+                self.outputs_mean)
+
         # Rename labels
         forecast_labels = list(map(lambda prop: prop + "_forecast", self.bands_modeling_estimation_output))
-        image_forecast_complete = image_forecast_complete.select(self.bands_modeling_estimation_output,
-                                                                 forecast_labels)
+        image_forecast_complete = image_forecast_complete.arrayFlatten([forecast_labels])
 
         return image_forecast_complete
 
     def TrainLinearLocal(self, lmbda=.1, sampling_factor=1./100.,
-                         with_task=False, normalize=True, divide_lmbda_by_n_samples=False,
+                         with_task=False, divide_lmbda_by_n_samples=False,
                          with_cross_validation=False):
         """
         Fit linear ridge regression to the image downloading the data and
@@ -282,56 +295,45 @@ class ModelCloudMasking:
         :param lmbda:
         :param sampling_factor:
         :param divide_lmbda_by_n_samples:
-        :param normalize: if we want normalization
         :param with_task: if the download is done using a task (require pydrive)
         :param with_cross_validation: donwload the data to fit the model with a task
         :return: forecasted image
         :rtype ee.Image
         """
         self._BuildDataSet(sampling_factor, normalize=False)
-        bme = list(self.bands_modeling_estimation)
-        bme.append("weight")
 
-        ds_download_pd = converters.eeFeatureCollectionToPandas(self.datos, bme,
+        ds_download_pd = converters.eeFeatureCollectionToPandas(self.datos, self.bands_modeling_estimation+["weight"],
                                                                 with_task=with_task)
-        from sklearn.linear_model import Ridge
-        from sklearn.model_selection import GridSearchCV
 
         if divide_lmbda_by_n_samples:
-            lmbda = lmbda/ds_download_pd.shape[0]
-        
-        n_samples = ds_download_pd.shape[0]
+            lmbda /= ds_download_pd.shape[0]
         
         logger.info("Size of downloaded ds: {}".format(ds_download_pd.shape))
-        pesos = np.asanyarray(ds_download_pd.weight)
-        ini = datetime.now()
+
+        best_params = None
+        if not with_cross_validation:
+            best_params = {"alpha":lmbda}
+
+        model = model_sklearn.LinearModel(best_params=best_params)
+
+        output_mean,output_std = model_sklearn.fit_model_local(ds_download_pd,model,
+                                                               self.bands_modeling_estimation_input,
+                                                               self.bands_modeling_estimation_output)
+
         if with_cross_validation:
-            kr = GridSearchCV(Ridge(fit_intercept=True,
-                                    alpha=lmbda,
-                                    normalize=normalize), cv=5,
-                              param_grid={"alpha": np.logspace(-6, 2, 9)},
-                              fit_params={"sample_weight": pesos})
-            kr.fit(ds_download_pd[self.bands_modeling_estimation_input],
-                   ds_download_pd[self.bands_modeling_estimation_output])
+            logger.info("Best params: {}".format(model.best_params_))
+            model = model.best_estimator_
 
-            lin_reg = kr.best_estimator_
-            self.lmbda = kr.best_params_["alpha"]
-            logger.info("CV params: {}".format(kr.best_params_))
-        else:
-            self.lmbda = lmbda
-            lin_reg = Ridge(fit_intercept=True,
-                            alpha=lmbda,
-                            normalize=normalize)
-            lin_reg.fit(ds_download_pd[self.bands_modeling_estimation_input],
-                        ds_download_pd[self.bands_modeling_estimation_output],
-                        pesos)
 
-        self.omega = ee.Array(lin_reg.coef_.T.tolist())
-        self.intercept = ee.Array([lin_reg.intercept_.tolist()])
-        
-        duration = (datetime.now() - ini).total_seconds()
+        self.lmbda = model.alpha
 
-        return n_samples,duration
+        omega = model.coef_.T*output_std
+        intercept = model.intercept_*output_std+output_mean
+
+        self.omega = ee.Array(omega.tolist())
+        self.intercept = ee.Array([intercept.tolist()])
+
+        return
 
     def TrainLinearServer(self, lmbda=.1, sampling_factor=1./100.):
         """
@@ -360,14 +362,14 @@ class ModelCloudMasking:
         omega = inputs_weigted.matrixMultiply(inputs_eeArray).add(tikhonov)\
             .matrixSolve(inputs_weigted.matrixMultiply(outputs_eeArray))
 
-        array_sd = ee.Array(self.inputs_sd.values(labels_input)).pow(-1)
+        array_sd = self.inputs_std.pow(-1)
         array_sd = ee.Array.cat([array_sd], 1).matrixToDiag()
 
         self.omega = array_sd.matrixMultiply(omega)
 
-        prediction_mean = ee.Array([ee.Dictionary(self.inputs_mean).values(labels_input)]).matrixMultiply(self.omega)
+        prediction_mean = self.inputs_mean.matrixMultiply(self.omega)
 
-        self.intercept = ee.Array([ee.Dictionary(self.outputs_mean).values(labels_output)]).subtract(prediction_mean)
+        self.intercept = self.outputs_mean.subtract(prediction_mean)
 
         return
 
@@ -379,10 +381,9 @@ class ModelCloudMasking:
         :return:
         """
         assert self.omega is not None, "Model has not been trained"
-        labels_input = self.bands_modeling_estimation_input
-        labels_output = self.bands_modeling_estimation_output
+
         # Test
-        image_test_input = self.img.select(labels_input)
+        image_test_input = self.img.select(self.bands_modeling_estimation_input)
 
         array1D = image_test_input.toArray()
         array2D = array1D.toArray(1)
@@ -391,9 +392,8 @@ class ModelCloudMasking:
         image_forecast_complete = array2D.matrixTranspose().matrixMultiply(self.omega).add(self.intercept)
 
         # Convert arrayImage to Image
-        image_forecast_complete = image_forecast_complete.arrayProject([1]).arrayFlatten([labels_output])
+        image_forecast_complete = image_forecast_complete.arrayProject([1])
 
-        # Denormalize outputs
         # Denormalize outputs
         return self._DenormalizeAndRename(image_forecast_complete, False)
 
@@ -599,7 +599,6 @@ def CloudClusterScore(img,region_of_interest,num_images=1,method_pred="persisten
                                             n_clusters = params["n_clusters"])
 
     return clusterscore,img_forecast
-
 
 
 FEATURES_CLOUDS = ["invNDVI",
