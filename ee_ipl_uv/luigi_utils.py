@@ -22,20 +22,16 @@ class RasterTarget(luigi.LocalTarget):
         return os.path.join(self.path, "info.json")
 
 
-class DownloadImageLags(luigi.Task):
+class DownloadImage(luigi.Task):
     image_index = luigi.Parameter()
     basepath = luigi.Parameter(default="images")
-    max_lags = luigi.IntParameter(default=3)
-    threshold_cc = luigi.IntParameter(default=8)
-
-    band_names = list(mcm.LANDSAT8_BANDNAMES)
 
     def output(self):
         return RasterTarget(os.path.join(self.basepath,
                                          self.image_index))
 
     def load_image(self):
-        return ee.Image(self.image_index)
+        return ee.Image(self.image_index), ["system:time_start", 'system:index']
 
     def run(self):
         if not os.path.exists(self.output().path):
@@ -44,20 +40,11 @@ class DownloadImageLags(luigi.Task):
 
 
         ee.Initialize()
-        image = self.load_image()
-        prev_images = mcm.SelectImagesTraining(image,
-                                               num_images=self.max_lags,
-                                               THRESHOLD_CC=self.threshold_cc)
-        prev_images = prev_images.toFloat()
-
-        lag_times = ["system:time_start_lag_" + str(x) for x in range(1, self.max_lags + 1)]
-        keys_cc = ["CC_lag_" + str(lag) for lag in range(1, self.max_lags + 1)]
-        properties = ["system:time_start", "filtering_prop", 'system:index']
-        properties += lag_times+keys_cc
+        image, properties = self.load_image()
 
         try:
             local_image.ExporteeImage(self.output().path,
-                                      prev_images,
+                                      image,
                                       properties_ee_img=properties)
         except ee.EEException as e:
             message = str(e)
@@ -67,5 +54,27 @@ class DownloadImageLags(luigi.Task):
                                                                                    message))
             else:
                 raise e
+
+
+class DownloadImageLags(DownloadImage):
+    max_lags = luigi.IntParameter(default=3)
+    threshold_cc = luigi.IntParameter(default=8)
+
+    def get_current_image(self):
+        return ee.Image(self.image_index)
+
+    def load_image(self):
+        image = self.get_current_image()
+        prev_images = mcm.SelectImagesTraining(image,
+                                               num_images=self.max_lags,
+                                               THRESHOLD_CC=self.threshold_cc)
+        prev_images = prev_images.toFloat()
+
+        lag_times = ["system:time_start_lag_" + str(x) for x in range(1, self.max_lags + 1)]
+        keys_cc = ["CC_lag_" + str(lag) for lag in range(1, self.max_lags + 1)]
+        properties = ["system:time_start", "filtering_prop", 'system:index']
+        properties += lag_times + keys_cc
+
+        return prev_images, properties
 
 

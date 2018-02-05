@@ -397,6 +397,54 @@ class ModelCloudMasking:
         # Denormalize outputs
         return self._DenormalizeAndRename(image_forecast_complete, False)
 
+def ComputeCloudCoverGeom(img,region_of_interest):
+    """Compute mean cloud cover and add it as property to the image"""
+    clouds = ee.Algorithms.Landsat.simpleCloudScore(img).gte(50)
+    # clouds_original = image_predict_clouds.select("fmask").eq(2)
+    # clouds_original = clouds_original.where(image_predict_clouds.select("fmask").eq(4),2)
+
+    # Add growing to the mask
+
+    # clouds = clouds_original.reduceNeighborhood(ee.Reducer.max(),
+    #                                            ee.Kernel.circle(radius=3))
+    # clouds = ee.Algorithms.Landsat.simpleCloudScore(img).select("cloud").gt(50).toFloat()
+
+    dictio = clouds.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
+                                 bestEffort=True)
+    numerito = ee.Number(dictio.get("cloud")).multiply(100)
+    img = img.set("CC", numerito)
+    return img
+
+def ImagesWithCC(landsat_img, start_date, end_date, region_of_interest=None, include_img=False):
+    landsat_info = landsat_img.getInfo()
+    landsat_full_id = landsat_info['id']
+    landsat_image_index = landsat_info['properties']['system:index']
+    landsat_collection = landsat_full_id.replace("/" + landsat_image_index, "")
+
+    WRS_ROW = landsat_info['properties']['WRS_ROW']
+    WRS_PATH = landsat_info['properties']['WRS_PATH']
+
+    # Retrieve previous images
+    if region_of_interest is None:
+        region_of_interest = ee.Element.geometry(landsat_img)
+        landsat_collection = ee.ImageCollection(landsat_collection) \
+            .filter(ee.Filter.eq("WRS_ROW", WRS_ROW)) \
+            .filter(ee.Filter.eq("WRS_PATH", WRS_PATH))
+    else:
+        landsat_collection = ee.ImageCollection(landsat_collection) \
+            .filterBounds(region_of_interest)
+        # .filter(ee.Filter.contains(leftField='.geo',
+        #                           rightValue=region_of_interest))
+
+    imgColl = landsat_collection.filterDate(start_date,
+                                            end_date) \
+        .sort("system:time_start")
+
+    if not include_img:
+        imgColl = imgColl.filter(ee.Filter.neq('system:index', landsat_image_index))
+
+    # Compute CC for the RoI
+    return imgColl.map(lambda x: ComputeCloudCoverGeom(x,region_of_interest))
 
 def PreviousImagesWithCC(landsat_img, region_of_interest=None,
                          REVISIT_DAY_PERIOD=15, NUMBER_IMAGES=30,
@@ -412,56 +460,24 @@ def PreviousImagesWithCC(landsat_img, region_of_interest=None,
     :return:
     """
     # Get collection id
-    landsat_info = landsat_img.getInfo()
-    landsat_full_id = landsat_info['id']
-    landsat_image_index = landsat_info['properties']['system:index']
-    landsat_collection = landsat_full_id.replace("/"+landsat_image_index, "")
 
-    WRS_ROW = landsat_info['properties']['WRS_ROW']
-    WRS_PATH = landsat_info['properties']['WRS_PATH']
+    return ImagesWithCC(landsat_img,
+                        ee.Date(ee.Number(landsat_img.get("system:time_start")).subtract(
+                            REVISIT_DAY_PERIOD * NUMBER_IMAGES * 24 * 60 * 60 * 1000)),
+                        ee.Date(landsat_img.get("system:time_start")),
+                        region_of_interest=region_of_interest,
+                        include_img=include_img)
 
-    current_date = datetime.utcfromtimestamp(landsat_info['properties']['system:time_start']/1000)
-    searching_date = current_date-timedelta(days=REVISIT_DAY_PERIOD*NUMBER_IMAGES)
+def NextImagesWithCC(landsat_img,region_of_interest=None,
+                     REVISIT_DAY_PERIOD=15, NUMBER_IMAGES=30,
+                     include_img=False):
 
-    # Retrieve previous images
-    if region_of_interest is None:
-        region_of_interest = ee.Element.geometry(landsat_img)
-        landsat_collection = ee.ImageCollection(landsat_collection)\
-            .filter(ee.Filter.eq("WRS_ROW", WRS_ROW)) \
-            .filter(ee.Filter.eq("WRS_PATH", WRS_PATH))
-    else:
-        landsat_collection = ee.ImageCollection(landsat_collection)\
-            .filterBounds(region_of_interest)
-            #.filter(ee.Filter.contains(leftField='.geo',
-            #                           rightValue=))
+    return ImagesWithCC(landsat_img,
+                        ee.Date(landsat_img.get("system:time_start")),
+                        ee.Date(ee.Number(landsat_img.get("system:time_start")).add(REVISIT_DAY_PERIOD*NUMBER_IMAGES*24*60*60*1000)),
+                        region_of_interest=region_of_interest,
+                        include_img=include_img)
 
-    imgColl = landsat_collection.filterDate(ee.Date(searching_date),
-                                            ee.Date(current_date+timedelta(seconds=10)))\
-        .sort("system:time_start")
-
-    if not include_img:
-        imgColl = imgColl.filter(ee.Filter.neq('system:index', landsat_image_index))
-
-    def ComputeCloudCoverGeom(img):
-        """Compute mean cloud cover and add it as property to the image"""
-        clouds = ee.Algorithms.Landsat.simpleCloudScore(img).gte(50)
-        # clouds_original = image_predict_clouds.select("fmask").eq(2)
-        # clouds_original = clouds_original.where(image_predict_clouds.select("fmask").eq(4),2)
-
-        # Add growing to the mask
-
-        # clouds = clouds_original.reduceNeighborhood(ee.Reducer.max(),
-        #                                            ee.Kernel.circle(radius=3))
-        # clouds = ee.Algorithms.Landsat.simpleCloudScore(img).select("cloud").gt(50).toFloat()
-
-        dictio = clouds.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
-                                     bestEffort=True)
-        numerito = ee.Number(dictio.get("cloud")).multiply(100)
-        img = img.set("CC", numerito)
-        return img
-
-    # Filter images with CC lower than THRESHOLD
-    return imgColl.map(ComputeCloudCoverGeom)
 
 LANDSAT8_BANDNAMES=['B1',  'B2','B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'BQA']
 
