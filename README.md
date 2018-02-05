@@ -6,7 +6,7 @@ The package extends the functionality of [Google Earth Engine API](https://devel
 implement cloud detection algorithms.
 
 ## Installation
-
+The package is tested on an standard python3 anaconda environment. It requires to install the `earthengine-api` package.
 ```bash
 python setup.py install
 ```
