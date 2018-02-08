@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 import ee
-import tifffile
+from skimage.external import tifffile
 from ee_ipl_uv import download
 import os
 import random
@@ -18,7 +18,7 @@ class LocalImage:
     def __init__(self,  tiff, metadata={}):
         self.tiff = tiff
         self.metadata = metadata
-        self.memmap = tifffile.imread(tiff, memmap=True)
+        self.memmap = tifffile.imread(tiff, memmap=True) #out="memmap"
         self.nrows = self.memmap.shape[0]
         self.ncols = self.memmap.shape[1]
 
