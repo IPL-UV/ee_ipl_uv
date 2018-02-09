@@ -5,7 +5,6 @@ Created on May 18, 2016
 @contact: gonzalo.mateo-garcia@uv.es
 
 '''
-import ee
 import numpy as np
 
 
