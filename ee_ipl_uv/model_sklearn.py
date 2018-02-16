@@ -79,7 +79,7 @@ def fit_model_local(ds_total,model,
 
     return output_mean,output_std
 
-def KRRModel(n_jobs=int(os.getenv("SLURM_NTASKS",3)),
+def KRRModel(n_jobs=int(os.getenv("SLURM_CPUS_PER_TASK",3)),
              cv=5, n_iter=30,verbose=2,best_params=None):
 
     if best_params is None:
@@ -100,7 +100,7 @@ def KRRModel(n_jobs=int(os.getenv("SLURM_NTASKS",3)),
 
     return model
 
-def LinearModel(n_jobs=int(os.getenv("SLURM_NTASKS",3)),
+def LinearModel(n_jobs=int(os.getenv("SLURM_CPUS_PER_TASK",3)),
                 cv=5, verbose=1,best_params=None):
     if best_params is None:
         ridge_cv = GridSearchCV(Ridge(normalize=True),
