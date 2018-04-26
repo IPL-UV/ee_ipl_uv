@@ -15,8 +15,6 @@ import ee
 from collections import namedtuple
 import time
 import tempfile
-import inspect
-import yaml
 from ee_ipl_uv.file_utils import addFormat, createTempFile
 import shutil
 import logging
@@ -24,6 +22,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def AuthDrive():
+    import yaml
     from pydrive.auth import GoogleAuth
     from pydrive.drive import GoogleDrive
     path_script = os.path.dirname(__file__)

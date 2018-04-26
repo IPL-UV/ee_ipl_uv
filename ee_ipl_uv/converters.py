@@ -10,7 +10,11 @@ import pandas as pd
 from datetime import datetime
 from ee_ipl_uv import file_utils
 import os
-from six.moves.urllib.request import urlretrieve
+import requests
+import logging
+import shutil
+
+logger = logging.getLogger(__name__)
 
 
 def ExtractColumnAseeArray1D(ftcol, column):
@@ -95,22 +99,29 @@ def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
                                               "ee_ipl_uv_downloads",
                                               fileFormat=filetype)
         tarea.start()
-        csv_f = WaitAndDownload(tarea, prefix,
-                                formato="csv", force=True)
+        filename = WaitAndDownload(tarea, prefix,
+                                   formato="csv", force=True)
     else:
         if properties is None:
             url = feature_col.getDownloadURL(filetype=filetype)
         else:
             url = feature_col.getDownloadURL(filetype=filetype,
-                                             selectors=properties)
-        csv_f, cabecera = urlretrieve(url, filename)
+                                             selectors=properties.getInfo())
 
-    datos = _readCSV(csv_f)
-    if properties is not None:
-        datos = datos[properties]
+        logger.debug("Downloading data from: " + url)
+
+        r_link = requests.get(url, stream=True)
+        if r_link.status_code == 200:
+            with open(filename, 'wb') as f:
+                r_link.raw.decode_content = True
+                shutil.copyfileobj(r_link.raw, f)
+
+
+    logger.debug("File downloaded, reading csv: " +filename)
+    datos = _readCSV(filename)
 
     if remove_file:
-        os.remove(csv_f)
+        os.remove(filename)
 
     return datos
 
@@ -140,5 +151,5 @@ def eeImageCollectionToPandas(img_col, properties=None):
         return ee.Feature(None, dictio)
 
     featureCol = ee.FeatureCollection(img_col.map(extractFeatures))
-    return eeFeatureCollectionToPandas(featureCol)
+    return eeFeatureCollectionToPandas(featureCol,properties=properties)
 

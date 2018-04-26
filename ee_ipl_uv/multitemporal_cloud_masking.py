@@ -8,15 +8,12 @@ Created on June 12, 2016
 
 import ee
 import random
-from datetime import datetime
-from datetime import timedelta
 from ee_ipl_uv import kernel
 from ee_ipl_uv import converters
 from ee_ipl_uv import time_series_operations
 from ee_ipl_uv import normalization
 from ee_ipl_uv import clustering
 from ee_ipl_uv import model_sklearn
-import numpy as np
 import logging
 
 
@@ -529,10 +526,13 @@ PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc":5,
                                     "trainlocal": True,
                                     "with_task": True,
                                     "with_cross_validation": False,
-                                    "threshold_dif_cloud":.09,
-                                    "threshold_dif_shadow": .03,
+                                    "threshold_dif_cloud":.04,
+                                    "threshold_reflectance":.175,
+                                    "do_clustering": True,
                                     "numPixels":1000,
-                                    "n_clusters":10
+                                    "n_clusters":10,
+                                    "growing_ratio":2,
+                                    "bands_thresholds":["B2", "B3", "B4"],
                                     }
 
 def CloudClusterScore(img,region_of_interest,num_images=1,method_pred="persistence",
@@ -605,13 +605,15 @@ def CloudClusterScore(img,region_of_interest,num_images=1,method_pred="persisten
     else:
         raise NotImplementedError("method %s is not implemented"%method_pred)
 
-    img_differences = image_with_lags.select(reflectance_bands_landsat8).subtract(
-        img_forecast.select(forecast_bands_landsat8))
-
-    clusterscore = clustering.ClusterClouds(img_differences,region_of_interest=region_of_interest,
+    clusterscore = clustering.ClusterClouds(image_with_lags.select(reflectance_bands_landsat8),
+                                            img_forecast.select(forecast_bands_landsat8),
+                                            region_of_interest=region_of_interest,
                                             threshold_dif_cloud = params["threshold_dif_cloud"],
-                                            threshold_dif_shadow = params["threshold_dif_shadow"],
+                                            do_clustering = params["do_clustering"],
+                                            threshold_reflectance=params["threshold_reflectance"],
                                             numPixels = params["numPixels"],
+                                            bands_thresholds=params["bands_thresholds"],
+                                            growing_ratio=params["growing_ratio"],
                                             n_clusters = params["n_clusters"])
 
     return clusterscore,img_forecast

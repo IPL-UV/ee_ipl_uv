@@ -3,7 +3,10 @@ import ee
 
 BANDS_MODEL = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B9", "B10", "B11"]
 
-def SelectClusters(img_differences,result_clustering,n_clusters, region_of_interest=None):
+def SelectClusters(image,
+                   background_prediction,
+                   result_clustering,n_clusters,bands_thresholds=["B2", "B3", "B4"],
+                   region_of_interest=None):
     """
     Function that contains the logic to create the cluster score mask. given the clustering result.
 
@@ -13,34 +16,56 @@ def SelectClusters(img_differences,result_clustering,n_clusters, region_of_inter
     :param region_of_interest:
     :return:
     """
-    bands_norm = ["B2", "B3", "B4"]
+    bands_norm_difference = [b+"_difference" for b in bands_thresholds]
 
-    # elms = dict()
-    cloud_score = None
+
+    img_joined = image.subtract(background_prediction)\
+                      .select(bands_thresholds,bands_norm_difference)\
+                      .addBands(image.select(bands_thresholds))
+
+    bands_and_difference_bands = bands_thresholds+bands_norm_difference
+
+    multitemporal_score = None
+    reflectance_score = None
 
     for i in range(n_clusters):
-        img_diff_clus = img_differences.updateMask(result_clustering.eq(i)).select(bands_norm)
+        img_diff_clus = img_joined.updateMask(result_clustering.eq(i)).select(bands_and_difference_bands)
         clusteri = img_diff_clus.reduceRegion(ee.Reducer.mean(),
                                               geometry=region_of_interest,
                                               bestEffort=True,
                                               scale=30)
-        clusteri = clusteri.toArray(bands_norm)
-        clusteri_mean = clusteri.reduce(ee.Reducer.mean(), axes=[0]).get([0])
-        clusteri_norm = clusteri.multiply(clusteri).reduce(ee.Reducer.mean(),
-                                                           axes=[0]).sqrt().get([0])
+        clusteri_diff = clusteri.toArray(bands_norm_difference)
+        clusteri_refl = clusteri.toArray(bands_thresholds)
+        clusteri_refl_norm = clusteri_refl.multiply(clusteri_refl).reduce(ee.Reducer.mean(),
+                                                                          axes=[0]).sqrt().get([0])
 
-        val_clusteri = ee.Algorithms.If(clusteri_mean.gt(0), clusteri_norm, clusteri_norm.multiply(-1))
-        cloud_scorei = result_clustering.eq(i).toFloat().multiply(ee.Number(val_clusteri))
-        if cloud_score is None:
-            cloud_score = cloud_scorei
+        clusteridiff_mean = clusteri_diff.reduce(ee.Reducer.mean(), axes=[0]).get([0])
+        clusteridiff_norm = clusteri_diff.multiply(clusteri_diff).reduce(ee.Reducer.mean(),
+                                                                          axes=[0]).sqrt().get([0])
+
+        multitemporal_score_clusteri = ee.Algorithms.If(clusteridiff_mean.gt(0),
+                                        clusteridiff_norm, clusteridiff_norm.multiply(-1))
+
+        multitemporal_score_clusteri = result_clustering.eq(i).toFloat().multiply(ee.Number(multitemporal_score_clusteri))
+        reflectance_score_clusteri = result_clustering.eq(i).toFloat().multiply(ee.Number(clusteri_refl_norm))
+
+        if multitemporal_score is None:
+            multitemporal_score = multitemporal_score_clusteri
+            reflectance_score = reflectance_score_clusteri
         else:
-            cloud_score = cloud_score.add(cloud_scorei)
+            multitemporal_score = multitemporal_score.add(multitemporal_score_clusteri)
+            reflectance_score = reflectance_score.add(reflectance_score_clusteri)
 
-    return cloud_score
+    return multitemporal_score, reflectance_score
 
 
-def ClusterClouds(img_differences,threshold_dif_cloud=.045,
-                  threshold_dif_shadow=.002,numPixels=1000,
+def ClusterClouds(image,
+                  background_prediction,
+                  threshold_dif_cloud=.045,
+                  do_clustering=True,numPixels=1000,
+                  threshold_reflectance=.175,
+                  bands_thresholds=["B2", "B3", "B4"],
+                  growing_ratio=2,
                   n_clusters=10,region_of_interest=None):
     """
     Function that compute the cloud score given the differences between the real and predicted image.
@@ -54,39 +79,54 @@ def ClusterClouds(img_differences,threshold_dif_cloud=.045,
     :return: ee.Image with 0 for clear pixels, 1 for shadow pixels and 2 for cloudy pixels
     """
 
+    img_differences = image.subtract(background_prediction)
 
     training = img_differences.sample(region=region_of_interest, scale=30, numPixels=numPixels)
 
     training, media, std = normalization.ComputeNormalizationFeatureCollection(training,
                                                                                BANDS_MODEL)
 
-    clusterer = ee.Clusterer.wekaKMeans(n_clusters).train(training)
-    img_differences_normalized = normalization.ApplyNormalizationImage(img_differences,
-                                                                       BANDS_MODEL,
-                                                                       media, std)
-    result = img_differences_normalized.cluster(clusterer)
+    if do_clustering:
+        clusterer = ee.Clusterer.wekaKMeans(n_clusters).train(training)
+        img_differences_normalized = normalization.ApplyNormalizationImage(img_differences,
+                                                                           BANDS_MODEL,
+                                                                           media, std)
+        result = img_differences_normalized.cluster(clusterer)
 
-    cloud_score = SelectClusters(img_differences,result,n_clusters,region_of_interest)
+        multitemporal_score, reflectance_score = SelectClusters(image,background_prediction,
+                                                                result,n_clusters,bands_thresholds,
+                                                                region_of_interest)
+
+    else:
+        arrayImageDiff = img_differences.select(bands_thresholds).toArray()
+        arrayImage = image.select(bands_thresholds).toArray()
+
+        arrayImageDiffmean = arrayImageDiff.arrayReduce(ee.Reducer.mean(), axes=[0])\
+                                           .gte(0).arrayGet([0])
+        arrayImageDiffnorm = arrayImageDiff.multiply(arrayImageDiff)\
+                                           .arrayReduce(ee.Reducer.mean(), axes=[0])\
+                                           .sqrt().arrayGet([0])
+
+        arrayImagenorm = arrayImage.multiply(arrayImage) \
+                                   .arrayReduce(ee.Reducer.mean(), axes=[0])\
+                                   .sqrt().arrayGet([0]) \
+
+        reflectance_score = arrayImagenorm
+
+        multitemporal_score = arrayImageDiffnorm.multiply(arrayImageDiffmean)
+
 
     # Apply thresholds
-    cloud_score_threshold = cloud_score.gt(threshold_dif_cloud).multiply(2)
-    cloud_score_threshold = cloud_score_threshold.add(cloud_score.lt(-threshold_dif_shadow))
+    if threshold_reflectance <= 0:
+        cloud_score_threshold = multitemporal_score.gt(threshold_dif_cloud)
+    else:
+        cloud_score_threshold = multitemporal_score.gt(threshold_dif_cloud)\
+                                                   .multiply(reflectance_score.gt(threshold_reflectance))
 
     # apply opening
-    kernel = ee.Kernel.circle(radius=1)
+    kernel = ee.Kernel.circle(radius=growing_ratio)
     cloud_score_threshold = cloud_score_threshold.focal_min(kernel=kernel).\
         focal_max(kernel= kernel)
 
-    # if no cloud no shadows
-    any_cloudy_pixels = cloud_score_threshold.reduceRegion(ee.Reducer.sum(),
-                                                           geometry=region_of_interest,
-                                                           bestEffort=True,
-                                                           scale=30).gt(0)
-
-    return cloud_score_threshold.multiply(any_cloudy_pixels)
-
-
-
-
-
+    return cloud_score_threshold
 
