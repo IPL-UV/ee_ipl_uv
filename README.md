@@ -24,6 +24,9 @@ proposed in [Gomez-Chova et al 2017](http://dx.doi.org/10.1117/1.JRS.11.015005)
 * The notebook `clustering_differences.ipynb` explains the clustering procedure and the 
 thresholding of the image to form the cloud mask.
 
+Schema of the proposed methodologies:
+![alt text](esquema_GEE.png)
+
 If you use this code please cite:
  
  ```
