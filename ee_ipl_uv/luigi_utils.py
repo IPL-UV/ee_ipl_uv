@@ -33,6 +33,9 @@ class DownloadImage(luigi.Task):
     def load_image(self):
         return ee.Image(self.image_index), ["system:time_start", 'system:index']
 
+    def load_region_of_interest(self):
+        return None
+
     def run(self):
         if not os.path.exists(self.output().path):
             self.output().makedirs()
@@ -44,7 +47,7 @@ class DownloadImage(luigi.Task):
 
         try:
             local_image.ExporteeImage(self.output().path,
-                                      image,
+                                      image,region=self.load_region_of_interest(),
                                       properties_ee_img=properties)
         except ee.EEException as e:
             message = str(e)

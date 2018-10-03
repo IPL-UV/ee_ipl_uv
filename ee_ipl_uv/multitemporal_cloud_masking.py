@@ -13,7 +13,6 @@ from ee_ipl_uv import converters
 from ee_ipl_uv import time_series_operations
 from ee_ipl_uv import normalization
 from ee_ipl_uv import clustering
-from ee_ipl_uv import model_sklearn
 import logging
 
 
@@ -169,6 +168,7 @@ class ModelCloudMasking:
         :return:
         """
 
+        from ee_ipl_uv import model_sklearn
         best_params = None
         if not with_cross_validation:
             best_params = {"alpha": lmbda, "gamma":gamma}
@@ -297,6 +297,7 @@ class ModelCloudMasking:
         :return: forecasted image
         :rtype ee.Image
         """
+        from ee_ipl_uv import model_sklearn
         self._BuildDataSet(sampling_factor, normalize=False)
 
         ds_download_pd = converters.eeFeatureCollectionToPandas(self.datos, self.bands_modeling_estimation+["weight"],
@@ -412,6 +413,9 @@ def ComputeCloudCoverGeom(img,region_of_interest):
     img = img.set("CC", numerito)
     return img
 
+_REFLECTANCE_BANDS_LANDSAT8 = ["B%d" % i for i in range(1, 12)]
+
+
 def ImagesWithCC(landsat_img, start_date, end_date, region_of_interest=None, include_img=False):
     landsat_info = landsat_img.getInfo()
     landsat_full_id = landsat_info['id']
@@ -429,13 +433,30 @@ def ImagesWithCC(landsat_img, start_date, end_date, region_of_interest=None, inc
             .filter(ee.Filter.eq("WRS_PATH", WRS_PATH))
     else:
         landsat_collection = ee.ImageCollection(landsat_collection) \
-            .filterBounds(region_of_interest)
+            .filterBounds(region_of_interest) \
+            .filter(ee.Filter.eq("WRS_ROW", WRS_ROW))
         # .filter(ee.Filter.contains(leftField='.geo',
         #                           rightValue=region_of_interest))
 
     imgColl = landsat_collection.filterDate(start_date,
                                             end_date) \
         .sort("system:time_start")
+
+    # Get rid of images with many invalid values
+
+    def _count_valid(img):
+        mascara = img.mask()
+        mascara = mascara.select(_REFLECTANCE_BANDS_LANDSAT8)
+        mascara = mascara.reduce(ee.Reducer.allNonZero())
+
+        dictio = mascara.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
+                                      bestEffort=True)
+
+        img = img.set("valids", dictio.get("all"))
+
+        return img
+
+    imgColl = imgColl.map(_count_valid).filter(ee.Filter.greaterThanOrEquals('valids',.8))
 
     if not include_img:
         imgColl = imgColl.filter(ee.Filter.neq('system:index', landsat_image_index))

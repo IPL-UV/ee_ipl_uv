@@ -7,11 +7,11 @@ Created on May 12, 2016
 
 import os
 import re
-import requests
 import zipfile
 import numpy as np
 import datetime
 import ee
+import requests
 from collections import namedtuple
 import time
 import tempfile
@@ -79,6 +79,7 @@ def MaybeDownloadThumb(image, params={"format": "jpg"}, image_name=None,
     :param footprint: string to print into the image
     :return: Returns the downloaded file full path
     """
+
     params = dict(params)
     filecreated = False
     if image_name is None:
@@ -154,7 +155,7 @@ def MaybeDownload(image, image_name_dir=None, path=os.getcwd(), remove_zip=False
     return image_name_dir
 
 
-def MaybeDownloadWithTask(image, image_name, path=os.getcwd(), force=False):
+def MaybeDownloadWithTask(image, image_name,region=None, path=os.getcwd(), force=False):
     """ Download the image to google drive and it download it afterwards to path
 
     Note: image is downloaded as a geotif file.
@@ -172,6 +173,7 @@ def MaybeDownloadWithTask(image, image_name, path=os.getcwd(), force=False):
         return image_name_full
 
     task = ee.batch.Export.image.toDrive(image,
+                                         region=region,
                                          description=image_name,
                                          folder="ee_ipl_uv_downloads")
     task.start()
@@ -245,7 +247,7 @@ def DownloadFromDrive(file_name, formato="tif",  path=os.getcwd(), force=False):
         return f_downs[0]
 
     if len(f_downs) == 4:
-        import tifffile
+        from skimage.external import tifffile
         f_downs = sorted(f_downs)
         up = np.concatenate([tifffile.imread(f) for f in f_downs[:2]],
                             axis=1)

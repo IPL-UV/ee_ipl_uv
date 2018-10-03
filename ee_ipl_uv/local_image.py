@@ -90,7 +90,7 @@ class LocalImage:
             json.dump(self.metadata, outfile)
 
 
-def ExporteeImage(local_dir, ee_img, metadata={},
+def ExporteeImage(local_dir, ee_img,region=None, metadata={},
                   properties_ee_img=None):
     """
     Exports an ee.Image with a ee.task into the folder local_dir.
@@ -123,8 +123,8 @@ def ExporteeImage(local_dir, ee_img, metadata={},
         json.dump(metadata, outfile)
 
     download.MaybeDownloadWithTask(ee_img,
-                                   download_name,
-                                   local_dir)
+                                   download_name,region=region,
+                                   path=local_dir)
 
 
     os.rename(os.path.join(local_dir ,download_name + ".tif"),
