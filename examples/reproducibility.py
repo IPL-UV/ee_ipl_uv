@@ -1,3 +1,19 @@
+"""
+Script to reproduce the results of the paper Multitemporal Cloud Masking in the Google Earth Engine (2018).
+
+The following command line downloads one image patch with the cloud mask computed with our method and its corresponding ground truth from the Biome dataset
+
+python reproducibility.py DownloadImageResults --image-index LC80290372013257LGN00 --split 013_011 --method percentile --basepath /folder/to/download/patch
+
+To download all the patches:
+
+python reproducibility.py DownloadAll --basepath /folder/to/download/patches
+
+Extra dependencies (apart from package ee_ipl_uv):
+ - luigi
+ - pydrive
+
+"""
 import luigi
 import ee
 import ee_ipl_uv.luigi_utils
@@ -21,8 +37,7 @@ def get_location_splits():
 
 class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
     split = luigi.Parameter()
-    method = luigi.ChoiceParameter(choices=["persistence","percentile","linear","kernel"],
-                                   var_type=str,
+    method = luigi.ChoiceParameter(choices=["percentile"],var_type=str,
                                    default="percentile")
 
     def output(self):
@@ -57,6 +72,8 @@ class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
 
 class DownloadAll(luigi.WrapperTask):
     basepath = luigi.Parameter(default="images_gee")
+    method = luigi.ChoiceParameter(choices=["percentile"],
+                                   default="percentile",var_type=str)
 
     def requires(self):
         locations = get_location_splits()
@@ -65,6 +82,7 @@ class DownloadAll(luigi.WrapperTask):
             for split_name,pol in v.items():
                 tarea = DownloadImageResults(image_index=index_name,
                                              basepath=self.basepath,
+                                             method=self.method,
                                              split=split_name)
                 tareas.append(tarea)
         return tareas

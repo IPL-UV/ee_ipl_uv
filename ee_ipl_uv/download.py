@@ -156,7 +156,7 @@ def MaybeDownload(image, image_name_dir=None, path=os.getcwd(), remove_zip=False
 
 
 def MaybeDownloadWithTask(image, image_name,region=None, path=os.getcwd(), force=False):
-    """ Download the image to google drive and it download it afterwards to path
+    """ Download the image to google drive and then from Google Drive to path
 
     Note: image is downloaded as a geotif file.
 
@@ -247,6 +247,7 @@ def DownloadFromDrive(file_name, formato="tif",  path=os.getcwd(), force=False):
         return f_downs[0]
 
     if len(f_downs) == 4:
+        ## Case when the image is divided in 4 patches.
         from skimage.external import tifffile
         f_downs = sorted(f_downs)
         up = np.concatenate([tifffile.imread(f) for f in f_downs[:2]],
@@ -263,28 +264,6 @@ def DownloadFromDrive(file_name, formato="tif",  path=os.getcwd(), force=False):
         return image_name_full_original
 
     raise IOError("files {} dont know how to concat them".format(f_downs))
-
-
-
-# def ReadImage(image_name_dir=None, tif_files=None):
-#     """Load the downloaded geotiff image as a numpy object
-#
-#     :param: name of directory with tiff files
-#     :param: tif_files (List[str]) list of tif files to read.
-#     :return: tuple(List[str],np.array): tuple where first element is the list of tif files read
-#         and the second the 3D array with the image
-#     """
-#     from osgeo import gdal
-#     lista = []
-#     if tif_files is None:
-#         tif_files = [image_name_dir+"/"+fi for fi in sorted(os.listdir(image_name_dir)) if fi.endswith(".tif")]
-#
-#     for layer in tif_files:
-#         ds = gdal.Open(layer)
-#         d2_array = np.array(ds.GetRasterBand(1).ReadAsArray())
-#         lista.append(d2_array)
-#
-#     return tif_files, np.dstack(tuple(lista))
 
 
 def DownloadImageCollectionThumb(img_collection, params={"format": "jpg"},

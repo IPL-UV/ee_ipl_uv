@@ -1,8 +1,7 @@
 from setuptools import setup,find_packages
-import ee_ipl_uv
 
 setup(name='ee_ipl_uv',
-      version=ee_ipl_uv.__version__,
+      version='0.1',
       description='Functions to operate with GEE',
       author='Gonzalo Mateo Garcia',
       author_email='gonzalo.mateo-garcia@uv.es',
