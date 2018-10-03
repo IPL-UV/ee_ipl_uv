@@ -22,11 +22,12 @@ def get_location_splits():
 class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
     split = luigi.Parameter()
     method = luigi.ChoiceParameter(choices=["persistence","percentile","linear","kernel"],
-                                   var_type=str)
+                                   var_type=str,
+                                   default="percentile")
 
     def output(self):
         return ee_ipl_uv.luigi_utils.RasterTarget(os.path.join(self.basepath,
-                                                               self.image_index+"_"+self.split))
+                                                               self.image_index+"_"+self.split+"_"+self.method))
     def load_region_of_interest(self):
         locations = get_location_splits()
         return [[p[1], p[0]] for p in locations[str(self.image_index)][str(self.split)][0]]
