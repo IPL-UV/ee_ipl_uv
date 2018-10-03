@@ -20,14 +20,18 @@ def get_location_splits():
     return locations
 
 class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
-    split = luigi.Parameter(default="caca")
+    split = luigi.Parameter()
+    method = luigi.ChoiceParameter(choices=["persistence","percentile","linear","kernel"],
+                                   var_type=str)
 
+    def output(self):
+        return ee_ipl_uv.luigi_utils.RasterTarget(os.path.join(self.basepath,
+                                                               self.image_index+"_"+self.split))
     def load_region_of_interest(self):
         locations = get_location_splits()
         return [[p[1], p[0]] for p in locations[str(self.image_index)][str(self.split)][0]]
 
     def load_image(self):
-        locations = get_location_splits()
         image_predict_clouds = ee.Image('LANDSAT/LC8_L1T_TOA_FMASK/' + str(self.image_index))
 
         # Select region of interest (lng,lat)
@@ -36,7 +40,7 @@ class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
 
         cloud_score_percentile, pred_percentile = multitemporal_cloud_masking.CloudClusterScore(image_predict_clouds,
                                                                                                 region_of_interest,
-                                                                                                method_pred="percentile",
+                                                                                                method_pred=self.method,
                                                                                                 num_images=3)
 
         ground_truth = ee.Image("users/gonzmg88/LANDSAT8_CLOUDS/" + self.image_index + "_fixedmask")
