@@ -52,9 +52,8 @@ class DownloadImage(luigi.Task):
         except ee.EEException as e:
             message = str(e)
             if "The value of 'offset' must be non-negative" in message:
-                logging.info("The image %s does not have %d previous images\n %s"%(self.image_index,
-                                                                                   self.max_lags,
-                                                                                   message))
+                logging.info("The image %s does not have previous images\n %s"%(self.image_index,
+                                                                                message))
             else:
                 raise e
 
