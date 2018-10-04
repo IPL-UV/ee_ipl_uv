@@ -1,5 +1,5 @@
 """
-Script to reproduce the results of the paper Multitemporal Cloud Masking in the Google Earth Engine (2018).
+Script to reproduce the results of the paper Multitemporal Cloud Masking in the Google Earth Engine (Mateo-García et al 2018).
 
 The following command line downloads one image patch with the cloud mask computed with our method and its corresponding ground truth from the Biome dataset
 
@@ -71,7 +71,7 @@ class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
 
 
 class DownloadAll(luigi.WrapperTask):
-    basepath = luigi.Parameter(default="images_gee")
+    basepath = luigi.Parameter(default="reproducibility_results")
     method = luigi.ChoiceParameter(choices=["percentile"],
                                    default="percentile",var_type=str)
 
