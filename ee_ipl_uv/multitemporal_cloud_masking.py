@@ -500,7 +500,8 @@ def NextImagesWithCC(landsat_img,region_of_interest=None,
 LANDSAT8_BANDNAMES=['B1',  'B2','B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'BQA']
 
 def SelectImagesTraining(landsat_img,band_names=LANDSAT8_BANDNAMES,
-                         region_of_interest=None, num_images=3, REVISIT_DAY_PERIOD=15, threshold_cc=5):
+                         region_of_interest=None, num_images=3, REVISIT_DAY_PERIOD=15,
+                         threshold_cc=10):
     """
     Given a landsat image, it returns the num_images previous images together with the current image with CC lower than
      THRESHOLD_CC. The returned image contains previous images in bands. It will have num_bands*(num_images+1) bands
@@ -540,7 +541,7 @@ def PredictPercentile(img, region_of_interest,num_images=3,threshold_cc=5):
     img_percentile = imgColl.reduce(reducer=ee.Reducer.percentile(percentiles=[50]))
     return img_percentile
 
-PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc":5,
+PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc":10,
                                     "sampling_factor":.05,
                                     "lmbda": 1e-6,
                                     "gamma": 0.01,
@@ -550,7 +551,7 @@ PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc":5,
                                     "threshold_dif_cloud":.04,
                                     "threshold_reflectance":.175,
                                     "do_clustering": True,
-                                    "numPixels":1000,
+                                    "numPixels":5000,
                                     "n_clusters":10,
                                     "growing_ratio":2,
                                     "bands_thresholds":["B2", "B3", "B4"],
