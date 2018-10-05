@@ -35,9 +35,11 @@ def get_location_splits():
 
     return locations
 
+
 class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
     split = luigi.Parameter()
-    method = luigi.ChoiceParameter(choices=["percentile"],var_type=str,
+    method = luigi.ChoiceParameter(choices=["percentile","persistence","linear","kernel"],
+                                   var_type=str,
                                    default="percentile")
 
     def output(self):
@@ -56,8 +58,7 @@ class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
 
         cloud_score_percentile, pred_percentile = multitemporal_cloud_masking.CloudClusterScore(image_predict_clouds,
                                                                                                 region_of_interest,
-                                                                                                method_pred=self.method,
-                                                                                                num_images=3)
+                                                                                                method_pred=self.method)
 
         ground_truth = ee.Image("users/gonzmg88/LANDSAT8_CLOUDS/" + self.image_index + "_fixedmask")
 
@@ -72,7 +73,7 @@ class DownloadImageResults(ee_ipl_uv.luigi_utils.DownloadImage):
 
 class DownloadAll(luigi.WrapperTask):
     basepath = luigi.Parameter(default="reproducibility_results")
-    method = luigi.ChoiceParameter(choices=["percentile"],
+    method = luigi.ChoiceParameter(choices=["percentile","persistence","linear","kernel"],
                                    default="percentile",var_type=str)
 
     def requires(self):

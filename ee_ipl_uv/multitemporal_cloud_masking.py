@@ -557,7 +557,7 @@ PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc":10,
                                     "bands_thresholds":["B2", "B3", "B4"],
                                     }
 
-def CloudClusterScore(img,region_of_interest,num_images=1,method_pred="persistence",
+def CloudClusterScore(img,region_of_interest,num_images=3,method_pred="persistence",
                       params=None):
     """
     Function to obtain the cloud cluster score in one shot.
