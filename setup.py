@@ -9,4 +9,8 @@ setup(name='ee_ipl_uv',
       install_requires=["numpy","requests",
                         "pandas", "earthengine-api"],
       include_package_data=True,
+      package_data={
+            # If any package contains *.txt or *.rst files, include them:
+            '': ['*.json']
+      },
       zip_safe=False)
