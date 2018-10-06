@@ -7,7 +7,7 @@ python reproducibility.py DownloadImageResults --image-index LC80290372013257LGN
 
 To download all the patches:
 
-python reproducibility.py DownloadAll --basepath /folder/to/download/patches
+python reproducibility.py DownloadAll --method percentile --basepath /folder/to/download/patches
 
 Extra dependencies (apart from package ee_ipl_uv):
  - luigi
