@@ -16,11 +16,12 @@ The package is tested on an standard python3 anaconda environment. It requires t
 python setup.py install
 ```
 
-## `reproducibility` folder
+## Reproducibility
 
-It contains the script, the notebooks and instructions needed to reproduce the results of ([Mateo-Garcia et al 2018](http://dx.doi.org/10.3390/rs10071079)). See [reproducibility/README.md](reproducibility/README.md)
+The folder `reproducibility` contains scripts, notebooks and instructions needed to reproduce the results of [Mateo-Garcia et al 2018: Multitemporal Cloud Masking in the Google Earth Engine](http://dx.doi.org/10.3390/rs10071079). See [reproducibility/README.md](reproducibility/README.md)
+![alt text](esquema_GEE.png)
 
-## `examples` folder
+## Examples
 
 The `examples` folder contains several notebooks that go step by step in the proposed multitemporal cloud detection schemes.
 * The notebook `cloudscore_different_preds.ipynb` shows ready to use examples of the proposed cloud detection scheme. 
@@ -30,8 +31,7 @@ background estimation. This notebook shows also the compairson between the propo
 proposed in ([Gomez-Chova et al 2017](http://dx.doi.org/10.1117/1.JRS.11.015005))
 * The notebook `clustering_differences.ipynb` explains the clustering procedure and the thresholding of the image to form the cloud mask.
 
-Scheme of the proposed methodology:
-![alt text](esquema_GEE.png)
+
 
 If you use this code please cite:
  

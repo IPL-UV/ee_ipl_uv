@@ -1,6 +1,6 @@
 # Reproducibility
 
-This folder contains the script, the notebooks and instructions needed to reproduce the results of ([Mateo-Garcia et al 2018](http://dx.doi.org/10.3390/rs10071079)).
+This folder contains the script, the notebooks and instructions needed to reproduce the results of [Mateo-Garcia et al 2018: Multitemporal Cloud Masking in the Google Earth Engine](http://dx.doi.org/10.3390/rs10071079).
 
 ## Load the same patches from Biome dataset
 
@@ -37,7 +37,7 @@ _ = plt.title(product_name+" B1 500x500 patch: "+patch_name)
 
 The script `reproducibility.py` reruns the experiments. It applies the proposed methodology and download for each patch the Landsat 8 product, the ground truth from the Biome dataset ([Foga et al 2017](http://doi.org/10.5066/F7251GDH)), the proposed cloud mask and the FMask mask.
 
-In case you don't need to download the data from the GEE go to `examples/cloudscore_different_preds.ipynb`. 
+In case you don't need to download the data from the GEE see `examples/cloudscore_different_preds.ipynb`. 
 
 To run `reproducibility.py` you need to install the packages `pydrive` and `luigi`. The `pydrive` package is used to download the data from Google Drive. It expects the folder `ee_ipl_uv_downloads` exists in your Google Drive. 
 
