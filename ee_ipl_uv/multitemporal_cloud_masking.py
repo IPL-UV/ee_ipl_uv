@@ -456,7 +456,7 @@ def ImagesWithCC(landsat_img, start_date, end_date, region_of_interest=None, inc
 
         return img
 
-    imgColl = imgColl.map(_count_valid).filter(ee.Filter.greaterThanOrEquals('valids',.8))
+    imgColl = imgColl.map(_count_valid).filter(ee.Filter.greaterThanOrEquals('valids',.5))
 
     if not include_img:
         imgColl = imgColl.filter(ee.Filter.neq('system:index', landsat_image_index))
