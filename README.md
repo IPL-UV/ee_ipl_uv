@@ -3,7 +3,7 @@
 This project contains a python package on `ee_ipl_uv` folder.
 
 The package extends the functionality of [Google Earth Engine API](https://developers.google.com/earth-engine/#api) (`ee`) to
-implement cloud detection algorithms.
+implement multitemporal cloud detection algorithms.
 
 In particular it contains the code to reproduce the results of ([Mateo-Garcia et al 2018](http://dx.doi.org/10.3390/rs10071079)) and ([Gomez-Chova et al 2017](http://dx.doi.org/10.1117/1.JRS.11.015005)).
 
