@@ -61,7 +61,7 @@ def eeFeatureCollectionToNumpy(ftcol, columns):
 
 
 def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
-                                filename=None):
+                                filename=None, mounted_drive=False):
     """
     Converts ee.FeatureCollection server obj to pandas.DataFrame local obj.
 
@@ -70,12 +70,13 @@ def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
     :param properties: (optional) list of columns to export
     :param with_task: (default false). If download is done throw ee.batch.Export.table
     :param filename: (optional) if None csv downloaded will be removed.
+    :param mounted_drive: if drive is mounted we don't need to use pyDrive
     If present nothing will be downloaded
 
     :return: pandas.DataFrame object
     """
     # Features is a list of dict with the output
-    remove_file = True
+    remove_file = not mounted_drive
     filetype = "csv"
     if filename is None:
         filename = file_utils.createTempFile(params={"format": filetype},
@@ -90,23 +91,28 @@ def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
     prefix = file_utils.removeFormat(os.path.basename(filename), "csv")
 
     if with_task:
-        from ee_ipl_uv.download import WaitAndDownload
+        from ee_ipl_uv.download import WaitAndDownload, WaitTask
         if properties is not None:
             feature_col = feature_col.select(properties)
 
         tarea = ee.batch.Export.table.toDrive(feature_col,
                                               prefix,
-                                              "ee_ipl_uv_downloads",
+                                              folder="ee_ipl_uv_downloads",
                                               fileFormat=filetype)
         tarea.start()
-        filename = WaitAndDownload(tarea, prefix,
-                                   formato="csv", force=True)
+        if mounted_drive:
+            WaitTask(tarea)
+            filename = os.path.join("/content/drive/ee_ipl_uv_downloads/", prefix+".csv")
+        else:
+            filename = WaitAndDownload(tarea, prefix,
+                                       formato="csv", force=True)
     else:
         if properties is None:
             url = feature_col.getDownloadURL(filetype=filetype)
         else:
+            properties_list = properties.getInfo()
             url = feature_col.getDownloadURL(filetype=filetype,
-                                             selectors=properties.getInfo())
+                                             selectors=properties_list)
 
         logger.debug("Downloading data from: " + url)
 
@@ -115,7 +121,6 @@ def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
             with open(filename, 'wb') as f:
                 r_link.raw.decode_content = True
                 shutil.copyfileobj(r_link.raw, f)
-
 
     logger.debug("File downloaded, reading csv: " +filename)
     datos = _readCSV(filename)
@@ -151,5 +156,5 @@ def eeImageCollectionToPandas(img_col, properties=None):
         return ee.Feature(None, dictio)
 
     featureCol = ee.FeatureCollection(img_col.map(extractFeatures))
-    return eeFeatureCollectionToPandas(featureCol,properties=properties)
+    return eeFeatureCollectionToPandas(featureCol, properties=None)
 

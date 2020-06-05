@@ -35,11 +35,11 @@ _ = plt.title(product_name+" B1 500x500 patch: "+patch_name)
 
 ### Run and download the data
 
-The script `reproducibility.py` reruns the experiments. It applies the proposed methodology and download for each patch the Landsat 8 product, the ground truth from the Biome dataset ([Foga et al 2017](http://doi.org/10.5066/F7251GDH)), the proposed cloud mask and the FMask mask.
+The script `reproducibility.py` reruns the experiments. It applies the proposed methodology and download for each patch the Landsat 8 product and the ground truth from the Biome dataset ([Foga et al 2017](http://doi.org/10.5066/F7251GDH)).
 
 In case you don't need to download the data from the GEE see `examples/cloudscore_different_preds.ipynb`. 
 
-To run `reproducibility.py` you need to install the packages `pydrive` and `luigi`. The `pydrive` package is used to download the data from Google Drive. It expects the folder `ee_ipl_uv_downloads` exists in your Google Drive. 
+To run `reproducibility.py` you need to install the packages `pydrive`. The `pydrive` package is used to download the data from Google Drive. It expects the folder `ee_ipl_uv_downloads` exists in your Google Drive. 
 
 To donwnload a single patch run:
 

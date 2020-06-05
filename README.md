@@ -1,37 +1,44 @@
-# `ee_ipl_uv` package
+# Multitemporal Cloud Masking in the GEE
 
-This project contains a python package on `ee_ipl_uv` folder.
-
-The package extends the functionality of [Google Earth Engine API](https://developers.google.com/earth-engine/#api) (`ee`) to
+This project contains a python package that extends the functionality of the [Google Earth Engine API](https://developers.google.com/earth-engine/#api) (`ee`) to
 implement multitemporal cloud detection algorithms.
 
 In particular it contains the code to reproduce the results of ([Mateo-Garcia et al 2018](http://dx.doi.org/10.3390/rs10071079)) and ([Gomez-Chova et al 2017](http://dx.doi.org/10.1117/1.JRS.11.015005)).
 
+![alt text](esquema_GEE.png)
+
+## Update 2020-06
+
+* The Landsat-8 collection with FMask used in the articles is not longer available. We have modified the code to work with new Landsat-8 collections (`LANDSAT/LC08/C01/T1_TOA/`).
+* We added a [notebook](#Examples) that applies our method to Sentinel-2 images. (from collection `COPERNICUS/S2/`)
+* [Notebooks](#Examples) can be browsed in colab.
 
 ## Installation
 
-The package is tested on an standard python3 anaconda environment. It requires to install first the `earthengine-api` package.
+The following code creates a fresh conda environment with required dependencies:
 
 ```bash
+ conda create -n ee python=3 numpy scipy jupyterlab matplotlib scikit-learn pillow requests luigi pandas scikit-image
+pip install earthengine-api
+
 python setup.py install
 ```
+
+## Examples
+Examples can be open in Google Colab.
+
+The `examples` folder contains several notebooks that go step by step in the proposed multitemporal cloud detection schemes.
+
+* The notebook `cloudscore_different_preds.ipynb` shows ready to use examples of the proposed cloud detection scheme for Landsat-8. [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/IPL-UV/ee_ipl_uv/blob/master/examples/cloudscore_different_preds.ipynb)
+* The notebook `cloudscore_different_preds-S2.ipynb` shows ready to use examples of the proposed cloud detection scheme for Sentinel-2. [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/IPL-UV/ee_ipl_uv/blob/master/examples/cloudscore_different_preds-S2.ipynb)
+* The notebook `multitemporal_cloud_masking_sample.ipynb` explains in great detail the method for background estimation 
+proposed in ([Gomez-Chova et al 2017](http://dx.doi.org/10.1117/1.JRS.11.015005)) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/IPL-UV/ee_ipl_uv/blob/master/examples/multitemporal_cloud_masking_sample.ipynb)
+* The notebook `clustering_differences.ipynb` explains the clustering procedure and the thresholding of the image to form the cloud mask. [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/IPL-UV/ee_ipl_uv/blob/master/examples/clustering_differences.ipynb)
 
 ## Reproducibility
 
 The folder `reproducibility` contains scripts, notebooks and instructions needed to reproduce the results of [Mateo-Garcia et al 2018: Multitemporal Cloud Masking in the Google Earth Engine](http://dx.doi.org/10.3390/rs10071079). See [reproducibility/README.md](reproducibility/README.md)
-![alt text](esquema_GEE.png)
-
-## Examples
-
-The `examples` folder contains several notebooks that go step by step in the proposed multitemporal cloud detection schemes.
-* The notebook `cloudscore_different_preds.ipynb` shows ready to use examples of the proposed cloud detection scheme. 
-The function `CloudClusterScore` receives an image as an argument and return the proposed cloud score together with the 
-background estimation. This notebook shows also the compairson between the proposed cloud masks and the ground truth for a given patch.
-* The notebook `multitemporal_cloud_masking_sample.ipynb` explains in great detail the method for background estimation 
-proposed in ([Gomez-Chova et al 2017](http://dx.doi.org/10.1117/1.JRS.11.015005))
-* The notebook `clustering_differences.ipynb` explains the clustering procedure and the thresholding of the image to form the cloud mask.
-
-
+Note: due to changes in new tier Landsat-8 collections results might change. 
 
 If you use this code please cite:
  

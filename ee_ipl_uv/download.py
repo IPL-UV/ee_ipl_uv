@@ -92,7 +92,7 @@ def MaybeDownloadThumb(image, params={"format": "jpg"}, image_name=None,
     if not filecreated and os.path.exists(image_name):
         os.remove(image_name)
 
-    url = image.getThumbUrl(params)
+    url = image.getThumbURL(params)
 
     r_link = requests.get(url, stream=True)
     if r_link.status_code == 200:
@@ -180,6 +180,28 @@ def MaybeDownloadWithTask(image, image_name,region=None, path=os.getcwd(), force
     return WaitAndDownload(task, image_name, "tif", path, True)
 
 
+def WaitTask(task, extra_text=""):
+    """
+    Wait until task finishes
+
+    :param task:
+    :param extra_text: Extra text to add to log
+    :return:
+    """
+    time_elapsed = 0
+    while task.active():
+        if (time_elapsed % 60) == 0:
+            logger.info("{} Elapsed: {:d}s Status: {}".format(extra_text, time_elapsed,
+                                                              task.status()["state"]))
+        time.sleep(10)
+        time_elapsed += 10
+
+    if task.status()["state"] != "COMPLETED":
+        raise IOError("{} Task status is not COMPLETED: {}".format(extra_text, repr(task.status())))
+
+    logger.info("{} ee.task COMPLETED {}s".format(extra_text, time_elapsed))
+
+
 def WaitAndDownload(task, filename, formato="tif",
                     path=os.getcwd(), force=False):
     """
@@ -192,18 +214,7 @@ def WaitAndDownload(task, filename, formato="tif",
     :param force:
     :return: name of the downloaded item
     """
-    time_elapsed = 0
-    while task.active():
-        if (time_elapsed % 60) == 0:
-            logger.info("Elapsed: {:d}s Status: {}".format(time_elapsed,
-                                                     task.status()["state"]))
-        time.sleep(10)
-        time_elapsed += 10
-
-    if task.status()["state"] != "COMPLETED":
-        raise IOError("Task status is not COMPLETED: " + repr(task.status()))
-
-    logger.info("ee.task COMPLETED {}s. Starting download from Google Drive".format(time_elapsed))
+    WaitTask(task)
     return DownloadFromDrive(filename, formato, path, force)
 
 

@@ -154,7 +154,7 @@ class ModelCloudMasking:
         return
 
     def TrainRBFKernelLocal(self, lmbda=.1, gamma=.5, sampling_factor=1./100.,
-                            with_task=False, with_cross_validation=False):
+                            with_task=False, with_cross_validation=False, mounted_drive=False):
         """
         Fit Kernelized RBF Ridge Regression to the current image subsampled. It downloads the data to
         fit. It uses sklearn.kernel_ridge library.
@@ -164,6 +164,12 @@ class ModelCloudMasking:
         :param sampling_factor: percentage of pixels to sample to build the model
         :param with_cross_validation: donwload the data to fit the model with a task
         :param with_task: donwload the data to fit the model with a task
+        :param mounted_drive: if True assumes the google Drive is mounted and can be accessed. To mount it use:
+
+        ```
+        from google.colab import drive
+        drive.mount('/content/drive')
+        ```
 
         :return:
         """
@@ -178,7 +184,7 @@ class ModelCloudMasking:
 
         ds_total = converters.eeFeatureCollectionToPandas(self.datos,
                                                           self.bands_modeling_estimation+["weight"],
-                                                          with_task=with_task)
+                                                          with_task=with_task, mounted_drive=mounted_drive)
 
         logger.info("Size of downloaded ds: {}".format(ds_total.shape))
 
@@ -284,7 +290,7 @@ class ModelCloudMasking:
 
     def TrainLinearLocal(self, lmbda=.1, sampling_factor=1./100.,
                          with_task=False, divide_lmbda_by_n_samples=False,
-                         with_cross_validation=False):
+                         with_cross_validation=False, mounted_drive=False):
         """
         Fit linear ridge regression to the image downloading the data and
         doing the fitting with sklearn.linear_model.
@@ -294,6 +300,13 @@ class ModelCloudMasking:
         :param divide_lmbda_by_n_samples:
         :param with_task: if the download is done using a task (require pydrive)
         :param with_cross_validation: donwload the data to fit the model with a task
+        :param mounted_drive: if True assumes the google Drive is mounted and can be accessed. To mount it use:
+
+        ```
+        from google.colab import drive
+        drive.mount('/content/drive')
+        ```
+
         :return: forecasted image
         :rtype ee.Image
         """
@@ -301,7 +314,7 @@ class ModelCloudMasking:
         self._BuildDataSet(sampling_factor, normalize=False)
 
         ds_download_pd = converters.eeFeatureCollectionToPandas(self.datos, self.bands_modeling_estimation+["weight"],
-                                                                with_task=with_task)
+                                                                with_task=with_task, mounted_drive=mounted_drive)
 
         if divide_lmbda_by_n_samples:
             lmbda /= ds_download_pd.shape[0]
@@ -310,7 +323,7 @@ class ModelCloudMasking:
 
         best_params = None
         if not with_cross_validation:
-            best_params = {"alpha":lmbda}
+            best_params = {"alpha": lmbda}
 
         model = model_sklearn.LinearModel(best_params=best_params)
 
@@ -321,7 +334,6 @@ class ModelCloudMasking:
         if with_cross_validation:
             logger.info("Best params: {}".format(model.best_params_))
             model = model.best_estimator_
-
 
         self.lmbda = model.alpha
 
@@ -395,9 +407,10 @@ class ModelCloudMasking:
         # Denormalize outputs
         return self._DenormalizeAndRename(image_forecast_complete, False)
 
-def ComputeCloudCoverGeom(img,region_of_interest):
+
+def ComputeCloudCoverGeom(clouds, region_of_interest):
     """Compute mean cloud cover and add it as property to the image"""
-    clouds = ee.Algorithms.Landsat.simpleCloudScore(img).gte(50)
+    # clouds = ee.Algorithms.Landsat.simpleCloudScore(img).gte(50)
     # clouds_original = image_predict_clouds.select("fmask").eq(2)
     # clouds_original = clouds_original.where(image_predict_clouds.select("fmask").eq(4),2)
 
@@ -410,43 +423,19 @@ def ComputeCloudCoverGeom(img,region_of_interest):
     dictio = clouds.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
                                  bestEffort=True)
     numerito = ee.Number(dictio.get("cloud")).multiply(100)
-    img = img.set("CC", numerito)
-    return img
-
-_REFLECTANCE_BANDS_LANDSAT8 = ["B%d" % i for i in range(1, 12)]
+    return numerito
 
 
-def ImagesWithCC(landsat_img, start_date, end_date, region_of_interest=None, include_img=False):
-    landsat_info = landsat_img.getInfo()
-    landsat_full_id = landsat_info['id']
-    landsat_image_index = landsat_info['properties']['system:index']
-    landsat_collection = landsat_full_id.replace("/" + landsat_image_index, "")
+def ImagesWithCC(wrapper_img, start_date, end_date, region_of_interest=None):
+    imgcoll = wrapper_img.collection_similar(region_of_interest=region_of_interest)
+    imgcoll = imgcoll.filterDate(start_date, end_date) \
+                                 .sort("system:time_start")
 
-    WRS_ROW = landsat_info['properties']['WRS_ROW']
-    WRS_PATH = landsat_info['properties']['WRS_PATH']
-
-    # Retrieve previous images
-    if region_of_interest is None:
-        region_of_interest = ee.Element.geometry(landsat_img)
-        landsat_collection = ee.ImageCollection(landsat_collection) \
-            .filter(ee.Filter.eq("WRS_ROW", WRS_ROW)) \
-            .filter(ee.Filter.eq("WRS_PATH", WRS_PATH))
-    else:
-        landsat_collection = ee.ImageCollection(landsat_collection) \
-            .filterBounds(region_of_interest) \
-            .filter(ee.Filter.eq("WRS_ROW", WRS_ROW))
-        # .filter(ee.Filter.contains(leftField='.geo',
-        #                           rightValue=region_of_interest))
-
-    imgColl = landsat_collection.filterDate(start_date,
-                                            end_date) \
-        .sort("system:time_start")
-
-    # Get rid of images with many invalid values
+    bands = wrapper_img.reflectance_bands()
 
     def _count_valid(img):
         mascara = img.mask()
-        mascara = mascara.select(_REFLECTANCE_BANDS_LANDSAT8)
+        mascara = mascara.select(bands)
         mascara = mascara.reduce(ee.Reducer.allNonZero())
 
         dictio = mascara.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
@@ -456,58 +445,57 @@ def ImagesWithCC(landsat_img, start_date, end_date, region_of_interest=None, inc
 
         return img
 
-    imgColl = imgColl.map(_count_valid).filter(ee.Filter.greaterThanOrEquals('valids',.5))
+    imgcoll = imgcoll.map(_count_valid).filter(ee.Filter.greaterThanOrEquals('valids', .5))
 
-    if not include_img:
-        imgColl = imgColl.filter(ee.Filter.neq('system:index', landsat_image_index))
+    if hasattr(wrapper_img, "toa_norm_fun"):
+        imgcoll = imgcoll.map(wrapper_img.toa_norm_fun)
 
     # Compute CC for the RoI
-    return imgColl.map(lambda x: ComputeCloudCoverGeom(x,region_of_interest))
+    # return imgcoll.map(lambda x: ComputeCloudCoverGeom(x, region_of_interest))
+    return imgcoll.map(lambda x: x.set("CC",
+                                       ComputeCloudCoverGeom(wrapper_img.clouds_bqa_fun(x),
+                                                             region_of_interest)))
 
-def PreviousImagesWithCC(landsat_img, region_of_interest=None,
-                         REVISIT_DAY_PERIOD=15, NUMBER_IMAGES=30,
-                         include_img=False):
+
+def PreviousImagesWithCC(wrapper_img, region_of_interest=None,
+                         NUMBER_IMAGES=30):
     """
     Return the NUMBER_IMAGES previous images with cloud cover
 
-    :param landsat_img:
+    :param wrapper_img:
     :param region_of_interest:
-    :param REVISIT_DAY_PERIOD:
     :param NUMBER_IMAGES:
-    :param include_img: if the current image (landsat_img) should be included in the series
     :return:
     """
-    # Get collection id
-
-    return ImagesWithCC(landsat_img,
-                        ee.Date(ee.Number(landsat_img.get("system:time_start")).subtract(
-                            REVISIT_DAY_PERIOD * NUMBER_IMAGES * 24 * 60 * 60 * 1000)),
-                        ee.Date(landsat_img.get("system:time_start")),
-                        region_of_interest=region_of_interest,
-                        include_img=include_img)
-
-def NextImagesWithCC(landsat_img,region_of_interest=None,
-                     REVISIT_DAY_PERIOD=15, NUMBER_IMAGES=30,
-                     include_img=False):
-
-    return ImagesWithCC(landsat_img,
-                        ee.Date(landsat_img.get("system:time_start")),
-                        ee.Date(ee.Number(landsat_img.get("system:time_start")).add(REVISIT_DAY_PERIOD*NUMBER_IMAGES*24*60*60*1000)),
-                        region_of_interest=region_of_interest,
-                        include_img=include_img)
+    return ImagesWithCC(wrapper_img,
+                        ee.Date(ee.Number(wrapper_img.ee_img.get("system:time_start")).subtract(
+                            wrapper_img.revisit_time_period() * NUMBER_IMAGES * 24 * 60 * 60 * 1000)),
+                        ee.Date(ee.Number(wrapper_img.ee_img.get("system:time_start")).subtract(12 * 60 * 60 * 1000)),
+                        # ee.Date(ee.Number(wrapper_img.ee_img.get("system:time_start"))),
+                        region_of_interest=region_of_interest)
 
 
-LANDSAT8_BANDNAMES=['B1',  'B2','B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'BQA']
+def NextImagesWithCC(wrapper_img, region_of_interest=None,
+                     NUMBER_IMAGES=30):
 
-def SelectImagesTraining(landsat_img,band_names=LANDSAT8_BANDNAMES,
+    return ImagesWithCC(wrapper_img,
+                        ee.Date(ee.Number(wrapper_img.ee_img.get("system:time_start")).add(12 * 60 * 60 * 1000)),
+                        ee.Date(ee.Number(wrapper_img.ee_img.get("system:time_start")).add(wrapper_img.revisit_time_period() * NUMBER_IMAGES * 24 * 60 * 60 * 1000)),
+                        region_of_interest=region_of_interest)
+
+
+# LANDSAT8_BANDNAMES = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'BQA']
+
+
+def SelectImagesTraining(wrapper_img,
                          region_of_interest=None, num_images=3, REVISIT_DAY_PERIOD=15,
                          threshold_cc=10):
     """
     Given a landsat image, it returns the num_images previous images together with the current image with CC lower than
      THRESHOLD_CC. The returned image contains previous images in bands. It will have num_bands*(num_images+1) bands
 
-    :param landsat_img: landsat image
-    :type landsat_img: ee.Image
+    :param wrapper_img: landsat image
+    :type wrapper_img: ee.Image
     :param band_names: band names to add to the current image
     :param region_of_interest:
     :type region_of_interest: ee.Geometry
@@ -517,57 +505,61 @@ def SelectImagesTraining(landsat_img,band_names=LANDSAT8_BANDNAMES,
     :return:
     :rtype ee.Image
     """
-    imgColl = PreviousImagesWithCC(landsat_img,region_of_interest,REVISIT_DAY_PERIOD)
+    imgColl = PreviousImagesWithCC(wrapper_img, region_of_interest, REVISIT_DAY_PERIOD)
     imgColl = imgColl.filter(ee.Filter.lt("CC", threshold_cc))
     size_img_coll = ee.Number(imgColl.size())
     imagenes_training = imgColl.toList(count=num_images, offset=size_img_coll.subtract(num_images))
 
     # join images into a single image
     # band_names = landsat_img.bandNames()
+    img_return = wrapper_img.ee_img
     for lag in range(1, num_images+1):
         image_add = ee.Image(imagenes_training.get(num_images-lag))
-        new_band_names = time_series_operations.GenerateBandNames(band_names, "_lag_"+str(lag))
-        image_add = image_add.select(band_names, new_band_names)
-        landsat_img = landsat_img.addBands(image_add)
-        landsat_img = landsat_img.set("system:time_start_lag_"+str(lag), image_add.get("system:time_start"))
-        landsat_img = landsat_img.set("CC_lag_" + str(lag), image_add.get("CC"))
+        new_band_names = time_series_operations.GenerateBandNames(wrapper_img.all_bands(), "_lag_"+str(lag))
+        image_add = image_add.select(wrapper_img.all_bands(), new_band_names)
+        img_return = img_return.addBands(image_add)
+        img_return = img_return.set("system:time_start_lag_" + str(lag), image_add.get("system:time_start"))
+        img_return = img_return.set("CC_lag_" + str(lag), image_add.get("CC"))
 
-    return landsat_img
+    return img_return
 
-def PredictPercentile(img, region_of_interest,num_images=3,threshold_cc=5):
+
+def PredictPercentile(img, region_of_interest, num_images=3, threshold_cc=5):
     imgColl = PreviousImagesWithCC(img, region_of_interest)
     imgColl = imgColl.filter(ee.Filter.lt("CC", threshold_cc)).limit(num_images)
 
     img_percentile = imgColl.reduce(reducer=ee.Reducer.percentile(percentiles=[50]))
     return img_percentile
 
-PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc":10,
-                                    "sampling_factor":.05,
+
+PARAMS_CLOUDCLUSTERSCORE_DEFAULT = {"threshold_cc": 5,
+                                    "sampling_factor": .05,
                                     "lmbda": 1e-6,
                                     "gamma": 0.01,
                                     "trainlocal": True,
                                     "with_task": True,
+                                    "mounted_drive": True,
                                     "with_cross_validation": False,
-                                    "threshold_dif_cloud":.04,
-                                    "threshold_reflectance":.175,
+                                    "threshold_dif_cloud": .04,
+                                    "threshold_reflectance": .175,
                                     "do_clustering": True,
-                                    "numPixels":5000,
-                                    "n_clusters":10,
-                                    "growing_ratio":2,
-                                    "bands_thresholds":["B2", "B3", "B4"],
+                                    "numPixels": 5000,
+                                    "n_clusters": 10,
+                                    "growing_ratio": 2
                                     }
 
-def CloudClusterScore(img,region_of_interest,num_images=3,method_pred="persistence",
+
+def CloudClusterScore(img, region_of_interest, num_images=3, method_pred="persistence",
                       params=None):
     """
     Function to obtain the cloud cluster score in one shot.
 
-    :param img:
+    :param img: object from image_wrapper class
     :param region_of_interest:
     :param num_images:
     :param method_pred:
     :param params:
-    :return:  cloud mask (2: cloud,1: shadow, 0: clear)
+    :return:  cloud mask (2: cloud, 1: shadow, 0: clear)
     """
     if params is None:
         params = dict(PARAMS_CLOUDCLUSTERSCORE_DEFAULT)
@@ -581,64 +573,69 @@ def CloudClusterScore(img,region_of_interest,num_images=3,method_pred="persisten
                                            region_of_interest=region_of_interest,
                                            num_images=num_images)
 
-    clouds_original = img.select('BQA').bitwiseAnd(int('1010000000000000', 2)).gt(0)
-
-    clouds = clouds_original.reduceNeighborhood(ee.Reducer.max(),
-                                                ee.Kernel.circle(radius=3))
-
-    reflectance_bands_landsat8 = ["B%d" % i for i in range(1, 12)]
-    forecast_bands_landsat8 = [i + "_forecast" for i in reflectance_bands_landsat8]
+    # reflectance_bands = ["B%d" % i for i in range(1, 12)]
+    reflectance_bands = img.reflectance_bands()
+    forecast_bands_landsat8 = [i + "_forecast" for i in reflectance_bands]
     if method_pred == "persistence":
-        reflectance_bands_landsat8_lag_1 = [i + "_lag_1" for i in reflectance_bands_landsat8]
-        img_forecast = image_with_lags.select(reflectance_bands_landsat8_lag_1,forecast_bands_landsat8)
+        reflectance_bands_landsat8_lag_1 = [i + "_lag_1" for i in reflectance_bands]
+        img_forecast = image_with_lags.select(reflectance_bands_landsat8_lag_1, forecast_bands_landsat8)
 
     elif method_pred == "percentile":
-        img_percentile = PredictPercentile(img, region_of_interest,num_images=num_images)
-        reflectance_bands_landsat8_perc50 = [i + "_p50" for i in reflectance_bands_landsat8]
+        img_percentile = PredictPercentile(img, region_of_interest, num_images=num_images,
+                                           threshold_cc=params["threshold_cc"])
+        reflectance_bands_landsat8_perc50 = [i + "_p50" for i in reflectance_bands]
         img_forecast = img_percentile.select(reflectance_bands_landsat8_perc50,
                                              forecast_bands_landsat8)
-
-    elif method_pred == "linear":
-        modelo = ModelCloudMasking(image_with_lags, reflectance_bands_landsat8,
-                                   clouds, num_images, region_of_interest)
-        if params["trainlocal"]:
-            modelo.TrainLinearLocal(sampling_factor=params["sampling_factor"],
-                                    lmbda=params["lmbda"],with_task=params["with_task"])
-        else:
-            modelo.TrainLinearServer(sampling_factor=params["sampling_factor"],
-                                     lmbda=params["lmbda"])
-
-        img_forecast = modelo.PredictLinear()
-
-    elif method_pred == "kernel":
-        modelo = ModelCloudMasking(image_with_lags, reflectance_bands_landsat8,
-                                   clouds, num_images, region_of_interest)
-        if params["trainlocal"]:
-            modelo.TrainRBFKernelLocal(sampling_factor=params["sampling_factor"],
-                                       lmbda=params["lmbda"], gamma=params["gamma"],
-                                       with_task=params["with_task"],
-                                       with_cross_validation=params["with_cross_validation"])
-        else:
-            modelo.TrainRBFKernelServer(sampling_factor=params["sampling_factor"],
-                                        lmbda=params["lmbda"], gamma=params["gamma"])
-
-        img_forecast = modelo.PredictRBFKernel()
-
     else:
-        raise NotImplementedError("method %s is not implemented"%method_pred)
+        # clouds_original = img.select('BQA').bitwiseAnd(int('0000000000010000', 2)).gt(0)
+        clouds_original = img.clouds_bqa()
+        clouds = clouds_original.reduceNeighborhood(ee.Reducer.max(),
+                                                    ee.Kernel.circle(radius=3))
 
-    clusterscore = clustering.ClusterClouds(image_with_lags.select(reflectance_bands_landsat8),
+        if method_pred == "linear":
+            modelo = ModelCloudMasking(image_with_lags, reflectance_bands,
+                                       clouds, num_images, region_of_interest)
+            if params["trainlocal"]:
+                modelo.TrainLinearLocal(sampling_factor=params["sampling_factor"],
+                                        lmbda=params["lmbda"], with_task=params["with_task"],
+                                        mounted_drive=params["mounted_drive"])
+            else:
+                modelo.TrainLinearServer(sampling_factor=params["sampling_factor"],
+                                         lmbda=params["lmbda"])
+
+            img_forecast = modelo.PredictLinear()
+
+        elif method_pred == "kernel":
+            modelo = ModelCloudMasking(image_with_lags, reflectance_bands,
+                                       clouds, num_images, region_of_interest)
+            if params["trainlocal"]:
+                modelo.TrainRBFKernelLocal(sampling_factor=params["sampling_factor"],
+                                           lmbda=params["lmbda"], gamma=params["gamma"],
+                                           with_task=params["with_task"],
+                                           mounted_drive=params["mounted_drive"],
+                                           with_cross_validation=params["with_cross_validation"])
+            else:
+                modelo.TrainRBFKernelServer(sampling_factor=params["sampling_factor"],
+                                            lmbda=params["lmbda"], gamma=params["gamma"])
+
+            img_forecast = modelo.PredictRBFKernel()
+
+        else:
+            raise NotImplementedError("method %s is not implemented" % method_pred)
+
+    clusterscore = clustering.ClusterClouds(image_with_lags.select(reflectance_bands),
                                             img_forecast.select(forecast_bands_landsat8),
                                             region_of_interest=region_of_interest,
-                                            threshold_dif_cloud = params["threshold_dif_cloud"],
-                                            do_clustering = params["do_clustering"],
+                                            bands_clustering=reflectance_bands,
+                                            bands_thresholds=img.rgb_bands(),
+                                            threshold_dif_cloud=params["threshold_dif_cloud"],
+                                            do_clustering=params["do_clustering"],
                                             threshold_reflectance=params["threshold_reflectance"],
-                                            numPixels = params["numPixels"],
-                                            bands_thresholds=params["bands_thresholds"],
+                                            numPixels=params["numPixels"],
                                             growing_ratio=params["growing_ratio"],
-                                            n_clusters = params["n_clusters"])
+                                            n_clusters=params["n_clusters"])
 
-    return clusterscore,img_forecast
+    return clusterscore, img_forecast
 
 
 FEATURES_CLOUDS = ["invNDVI",

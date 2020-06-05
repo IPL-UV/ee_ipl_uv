@@ -3,14 +3,16 @@ import ee
 
 BANDS_MODEL = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B9", "B10", "B11"]
 
+
 def SelectClusters(image,
                    background_prediction,
-                   result_clustering,n_clusters,bands_thresholds=["B2", "B3", "B4"],
+                   result_clustering,n_clusters, bands_thresholds=["B2", "B3", "B4"],
                    region_of_interest=None):
     """
     Function that contains the logic to create the cluster score mask. given the clustering result.
 
-    :param img_differences:
+    :param image:
+    :param background_prediction:
     :param result_clustering:
     :param n_clusters:
     :param region_of_interest:
@@ -18,9 +20,8 @@ def SelectClusters(image,
     """
     bands_norm_difference = [b+"_difference" for b in bands_thresholds]
 
-
     img_joined = image.subtract(background_prediction)\
-                      .select(bands_thresholds,bands_norm_difference)\
+                      .select(bands_thresholds, bands_norm_difference)\
                       .addBands(image.select(bands_thresholds))
 
     bands_and_difference_bands = bands_thresholds+bands_norm_difference
@@ -62,18 +63,22 @@ def SelectClusters(image,
 def ClusterClouds(image,
                   background_prediction,
                   threshold_dif_cloud=.045,
-                  do_clustering=True,numPixels=1000,
+                  do_clustering=True, numPixels=1000,
                   threshold_reflectance=.175,
                   bands_thresholds=["B2", "B3", "B4"],
+                  bands_clustering=BANDS_MODEL,
                   growing_ratio=2,
-                  n_clusters=10,region_of_interest=None):
+                  n_clusters=10, region_of_interest=None):
     """
     Function that compute the cloud score given the differences between the real and predicted image.
 
-    :param img_differences: image_real - image_pred
+    :param image:
+    :param background_prediction: image_real - image_pred
     :param threshold_dif_cloud: Threshold over the cloud score to be considered clouds
-    :param threshold_dif_shadow:Threshold over the cloud score to be considered shadows
+    :param threshold_reflectance: Threshold over the cloud score to be considered shadows
+    :param do_clustering: Wether to do the clustering or not
     :param n_clusters: number of clusters
+    :param bands_thresholds: Bands used to set the thresholds
     :param numPixels:  to be considered by the clustering algorithm
     :param region_of_interest:  region of interest within the image
     :return: ee.Image with 0 for clear pixels, 1 for shadow pixels and 2 for cloudy pixels
@@ -81,20 +86,20 @@ def ClusterClouds(image,
 
     img_differences = image.subtract(background_prediction)
 
-    training = img_differences.sample(region=region_of_interest, scale=30, numPixels=numPixels)
-
-    training, media, std = normalization.ComputeNormalizationFeatureCollection(training,
-                                                                               BANDS_MODEL)
-
     if do_clustering:
+        training = img_differences.select(bands_clustering).sample(region=region_of_interest, scale=30,
+                                                                   numPixels=numPixels)
+
+        training, media, std = normalization.ComputeNormalizationFeatureCollection(training,
+                                                                                   bands_clustering)
         clusterer = ee.Clusterer.wekaKMeans(n_clusters).train(training)
         img_differences_normalized = normalization.ApplyNormalizationImage(img_differences,
-                                                                           BANDS_MODEL,
+                                                                           bands_clustering,
                                                                            media, std)
         result = img_differences_normalized.cluster(clusterer)
 
-        multitemporal_score, reflectance_score = SelectClusters(image,background_prediction,
-                                                                result,n_clusters,bands_thresholds,
+        multitemporal_score, reflectance_score = SelectClusters(image, background_prediction,
+                                                                result, n_clusters, bands_thresholds,
                                                                 region_of_interest)
 
     else:
@@ -114,7 +119,6 @@ def ClusterClouds(image,
         reflectance_score = arrayImagenorm
 
         multitemporal_score = arrayImageDiffnorm.multiply(arrayImageDiffmean)
-
 
     # Apply thresholds
     if threshold_reflectance <= 0:
