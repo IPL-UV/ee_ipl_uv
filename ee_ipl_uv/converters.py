@@ -102,7 +102,7 @@ def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
         tarea.start()
         if mounted_drive:
             WaitTask(tarea)
-            filename = os.path.join("/content/drive/ee_ipl_uv_downloads/", prefix+".csv")
+            filename = os.path.join("/content/drive/My Drive/ee_ipl_uv_downloads/", prefix+".csv")
         else:
             filename = WaitAndDownload(tarea, prefix,
                                        formato="csv", force=True)
