@@ -7,6 +7,8 @@ In particular it contains the code to reproduce the results of ([Mateo-Garcia et
 
 ![alt text](esquema_GEE.png)
 
+Additional results of [Mateo-Garcia et al 2018](http://dx.doi.org/10.3390/rs10071079) can be browsed at http://isp.uv.es/projects/cdc/viewer_l8_GEE.html
+
 ## Update 2020-06
 
 * The Landsat-8 collection with FMask used in the articles is not longer available. We have modified the code to work with new Landsat-8 collections (`LANDSAT/LC08/C01/T1_TOA/`).
