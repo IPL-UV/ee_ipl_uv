@@ -13,6 +13,7 @@ import os
 import requests
 import logging
 import shutil
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,10 @@ def eeFeatureCollectionToPandas(feature_col, properties=None, with_task=False,
         if mounted_drive:
             WaitTask(tarea)
             filename = os.path.join("/content/drive/My Drive/ee_ipl_uv_downloads/", prefix+".csv")
+            if not os.path.exists(filename):
+                logger.info("File %s not ready in drive. Waiting 30 seconds" % filename)
+                time.sleep(30)
+            assert os.path.exists(filename), "%s does not exists in the drive" % filename
         else:
             filename = WaitAndDownload(tarea, prefix,
                                        formato="csv", force=True)
