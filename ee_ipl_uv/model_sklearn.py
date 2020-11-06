@@ -52,7 +52,7 @@ def fit_model_local(ds_total,model,
             if hasattr(model, "named_steps"):
                 model.fit(ds_total[bands_estimation_input],
                           output_dataset,
-                          kernelridge__sample_weight=ds_total["weight"].values)
+                          randomizedsearchcv__sample_weight=ds_total["weight"].values)
             else:
                 model.fit(ds_total[bands_estimation_input],
                           output_dataset,
@@ -79,7 +79,7 @@ def fit_model_local(ds_total,model,
 
     return output_mean,output_std
 
-def KRRModel(n_jobs=int(os.getenv("SLURM_CPUS_PER_TASK",3)),
+def KRRModel(n_jobs=2,
              cv=5, n_iter=30,verbose=2,best_params=None):
 
     if best_params is None:
