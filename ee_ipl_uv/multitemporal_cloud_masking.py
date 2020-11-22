@@ -96,14 +96,16 @@ class ModelCloudMasking:
         self.intercept = None
 
     def _BuildDataSet(self, sampling_factor,
-                      normalize):
+                      normalize,numPixels=None):
 
         estimation_set = self.img_est.sample(region=self.region,
                                              factor=sampling_factor,
+                                             numPixels=numPixels,
                                              seed=self.seed)
 
         prediction_set = self.img_pred.sample(region=self.region,
                                               factor=sampling_factor,
+                                              numPixels=numPixels,
                                               seed=self.seed)
         # Add weights
         estimation_set_size = ee.Number(estimation_set.size())
@@ -153,7 +155,7 @@ class ModelCloudMasking:
 
         return
 
-    def TrainRBFKernelLocal(self, lmbda=.1, gamma=.5, sampling_factor=1./100.,
+    def TrainRBFKernelLocal(self, lmbda=.1, gamma=.5, sampling_factor=1./100.,numPixels=40,
                             with_task=False, with_cross_validation=False, mounted_drive=False):
         """
         Fit Kernelized RBF Ridge Regression to the current image subsampled. It downloads the data to
@@ -162,8 +164,9 @@ class ModelCloudMasking:
         :param lmbda: regularization factor
         :param gamma: gamma factor to build the kernel (https://en.wikipedia.org/wiki/Radial_basis_function_kernel)
         :param sampling_factor: percentage of pixels to sample to build the model
+        :param numPixels: Num pixels to train KRR (see GEE ee.Image.sample function)
         :param with_cross_validation: donwload the data to fit the model with a task
-        :param with_task: donwload the data to fit the model with a task
+        :param with_task: download the data to fit the model with a task
         :param mounted_drive: if True assumes the google Drive is mounted and can be accessed. To mount it use:
 
         ```
@@ -180,7 +183,7 @@ class ModelCloudMasking:
             best_params = {"alpha": lmbda, "gamma":gamma}
 
         modelo = model_sklearn.KRRModel(best_params=best_params,verbose=1)
-        self._BuildDataSet(sampling_factor, normalize=False)
+        self._BuildDataSet(sampling_factor=sampling_factor, normalize=False,numPixels=numPixels)
 
         ds_total = converters.eeFeatureCollectionToPandas(self.datos,
                                                           self.bands_modeling_estimation+["weight"],
