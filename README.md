@@ -62,5 +62,10 @@ If you use this code please cite:
  year = {2018}
 } 
  ```
+ 
+ ## Related work
+
+* [Benchmarking Deep Learning Models for Cloud Detection in Landsat-8 and Sentinel-2](https://github.com/IPL-UV/DL-L8S2-UV)
+* [Landsat-8 to Proba-V transfer learning and Domain adaptation for cloud detection](https://github.com/IPL-UV/pvl8dagans)
 
   
