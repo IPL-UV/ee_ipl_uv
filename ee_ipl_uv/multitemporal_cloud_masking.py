@@ -72,7 +72,7 @@ class ModelCloudMasking:
 
         # Calculamos CC de la imagen actual
         dictio = self.cloud_mask.select([0], ["cloud"]).reduceRegion(reducer=ee.Reducer.mean(), geometry=region,
-                                                                     bestEffort=True)
+                                                                     bestEffort=True, scale=10.)
         self.cc_image = ee.Number(dictio.get("cloud")).getInfo()
 
         self.img_est = self.img.updateMask(self.cloud_mask.eq(0))
@@ -424,7 +424,7 @@ def ComputeCloudCoverGeom(clouds, region_of_interest):
     # clouds = ee.Algorithms.Landsat.simpleCloudScore(img).select("cloud").gt(50).toFloat()
 
     dictio = clouds.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
-                                 bestEffort=True)
+                                 bestEffort=True, scale=10)
     numerito = ee.Number(dictio.get("cloud")).multiply(100)
     return numerito
 
@@ -442,7 +442,7 @@ def ImagesWithCC(wrapper_img, start_date, end_date, region_of_interest=None):
         mascara = mascara.reduce(ee.Reducer.allNonZero())
 
         dictio = mascara.reduceRegion(reducer=ee.Reducer.mean(), geometry=region_of_interest,
-                                      bestEffort=True)
+                                      bestEffort=True, scale=10.)
 
         img = img.set("valids", dictio.get("all"))
 
