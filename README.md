@@ -29,7 +29,6 @@ python setup.py install
 ```
 
 ## Examples
-Examples can be open in Google Colab.
 
 The `examples` folder contains several notebooks that go step by step in the proposed multitemporal cloud detection schemes.
 
