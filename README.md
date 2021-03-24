@@ -68,4 +68,4 @@ If you use this code please cite:
 * [Benchmarking Deep Learning Models for Cloud Detection in Landsat-8 and Sentinel-2](https://github.com/IPL-UV/DL-L8S2-UV)
 * [Landsat-8 to Proba-V transfer learning and Domain adaptation for cloud detection](https://github.com/IPL-UV/pvl8dagans)
 
-  
+This work has been developed in the framework of the project TEC2016-77741-R (MINECO-ERDF) and the GEE Award project titled Cloud detection in the cloud granted to Luis Gómez-Chova.
