@@ -43,7 +43,8 @@ class L8L1TImage:
         return 15
 
     def all_bands(self):
-        return self.reflectance_bands() + ["BQA"]
+        #return self.reflectance_bands() + ["BQA"]
+        return self.reflectance_bands() + ["QA_PIXEL","QA_RADSAT","SAA","SZA","VAA","VZA"]
 
     def clouds_bqa(self):
         return clouds_bqa_landsat(self.ee_img)
